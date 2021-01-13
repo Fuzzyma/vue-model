@@ -1,0 +1,58 @@
+{
+  "name": "vue-model",
+  "version": "0.0.1",
+  "description": "An orm style model system that replaces your store and resolves relations for you",
+  "author": "Ulrich-Matthias Schäfer",
+  "license": "MIT",
+  "module": "./src/Model.ts",
+  "main": "./src/Model.ts",
+  "scripts": {
+    "dev": "vite",
+    "build": "vuedx-typecheck . && vite build",
+    "build:dev": "vite build --mode development --minify false",
+    "test": "mocha -r ts-node/register tests/**/*.test.ts",
+    "coverage": "nyc -r lcov -e .ts -x \"*.test.ts\" npm run test",
+    "debug": "node --inspect-brk -r ts-node/register ./src/Model.ts"
+  },
+  "peerDependencies": {
+    "vue": "^3.0.5"
+  },
+  "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^4.10.0",
+    "@typescript-eslint/parser": "^4.10.0",
+    "@vitejs/plugin-vue": "^1.0.4",
+    "@vue/compiler-sfc": "^3.0.5",
+    "@vuedx/typecheck": "^0.4.1",
+    "@vuedx/typescript-plugin-vue": "^0.4.1",
+    "bcrypt": "^5.0.0",
+    "eslint": "^7.15.0",
+    "eslint-config-standard": "^16.0.2",
+    "eslint-plugin-import": "^2.22.1",
+    "eslint-plugin-node": "^11.1.0",
+    "eslint-plugin-promise": "^4.2.1",
+    "eslint-plugin-vue": "^7.2.0",
+    "esm": "^3.2.25",
+    "mocha": "^8.2.1",
+    "nyc": "^15.1.0",
+    "sinon": "^9.2.1",
+    "sinon-chai": "^3.5.0",
+    "ts-node": "^9.0.0",
+    "typescript": "^4.1.3",
+    "vite": "^2.0.0-beta.5",
+    "vue-eslint-parser": "^7.3.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Fuzzyma/vue-model.git"
+  },
+  "keywords": [
+    "vue",
+    "model",
+    "orm",
+    "store"
+  ],
+  "bugs": {
+    "url": "https://github.com/Fuzzyma/vue-model/issues"
+  },
+  "homepage": "https://github.com/Fuzzyma/vue-model#readme"
+}
