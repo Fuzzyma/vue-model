@@ -113,7 +113,7 @@ function createUid () {
   return createString(uuid)
 }
 
-function createComputed<T> (getter: (context: Model) => T, setter: (context: Model, val: any) => void) {
+function createComputed<T> (getter: (context: Model) => T, setter = (context: Model, val: any) => { /* */ }) {
   return new ComputedField(getter, setter)
 }
 
@@ -853,6 +853,10 @@ export class Model {
     return this
   }
 
+  toJSON () {
+    return this.toObject()
+  }
+
   /**
    * Gives back model as object for further consumption
    */
@@ -906,6 +910,14 @@ export class Model {
     cascades.forEach((name) => {
       this[name].delete()
     })
+  }
+
+  clone<T extends Model> (this:T, relations?: string[]) {
+    return this.constructor.make(this.toObject()) as typeof this
+  }
+
+  copy<T extends Model> (this:T, relations?: string[]) {
+    return this.constructor.make({ ...this.toObject, [this.primaryKey]: undefined }) as typeof this
   }
 }
 
@@ -1003,7 +1015,7 @@ export class Relation<T extends Model = Model> extends Field<T> {
 
   foreignKey: string
   otherKey: string
-  order: Array<string> | null
+  order: Array<string>| ((a:T, b:T) => number) | null
   Type!: ctor<T>
 
   constructor (related: ctor<T> | string, foreignKey: string, otherKey: string = getModel(related).primaryKey, defaultValue: unknown = null) {
@@ -1021,12 +1033,20 @@ export class Relation<T extends Model = Model> extends Field<T> {
 
   orderBy (field: string, direction = 'asc') {
     this.order = [ field, direction ]
+    return this
   }
 
   resolveRelation (id: unknown): T | null
   resolveRelation (ids: unknown[]): T[]
   resolveRelation (ids: unknown[]): T[] | T | null {
-    return this.Type.get(ids) ?? null
+    const result = this.Type.get(ids)
+    if (Array.isArray(this.order)) {
+      const [ field, direction ] = this.order
+      result.sort((a:T, b:T) => (a[field] - b[field]) * (direction === 'asc' ? 1 : -1))
+    } else if (typeof this.order === 'function') {
+      result.sort(this.order)
+    }
+    return result ?? null
   }
 }
 
