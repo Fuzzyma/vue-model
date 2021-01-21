@@ -5,7 +5,7 @@ export default defineConfig({
   plugins: [ vue() ],
   build: {
     lib: {
-      formats: [ 'iife' ],
+      formats: [ 'iife', 'es' ],
       entry: './src/Model.ts',
       name: 'Model'
     },

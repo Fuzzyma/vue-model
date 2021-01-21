@@ -28,6 +28,9 @@ type ctor<T = any> = {
   [s: string]: any
 }
 
+type Key = number | string | symbol
+type KeyName = string | string[]
+
 // export function field (fn: (...args: any[]) => Field, ...args: any[]) {
 //   return (target: Model, propertyKey: string) => {
 //     console.log(target, propertyKey)
@@ -44,10 +47,10 @@ function getModel<T extends Model = Model> (model: ctor<T> | string) {
 function getPivotModel (
   model1: typeof Model | string,
   model2: typeof Model | string,
-  foreignKey1: string,
-  foreignKey2: string,
-  otherKey1: string,
-  otherKey2: string
+  foreignKey1: KeyName,
+  foreignKey2: KeyName,
+  otherKey1: KeyName,
+  otherKey2: KeyName
 ) {
   const model1Class = getModel(model1)
   const model2Class = getModel(model2)
@@ -58,15 +61,31 @@ function getPivotModel (
   wrapper[name] = getModel(name) as typeof Model
 
   if (!wrapper[name]) {
+
+    const arrayKey1 = Array.isArray(foreignKey1) ? foreignKey1 : [ foreignKey1 ]
+    const arrayKey2 = Array.isArray(foreignKey2) ? foreignKey2 : [ foreignKey2 ]
+
+    /* eslint-disable @typescript-eslint/ban-types */
+    const fields1 = arrayKey1.reduce((acc, curr) => {
+      acc[curr] = createString(null)
+      return acc
+    }, {} as Record<string, Field<String>>)
+
+    const fields2 = arrayKey1.reduce((acc, curr) => {
+      acc[curr] = createString(null)
+      return acc
+    }, {} as Record<string, Field<String>>)
+    /* eslint-enable @typescript-eslint/ban-types */
+
     wrapper[name] = class extends Model {
       static fields () {
         return {
           id: this.uid(),
-          [foreignKey1]: this.string(null),
-          [foreignKey2]: this.string(null),
+          ...fields1,
+          ...fields2,
           [camelCase(model1Class.name)]: this.belongsTo(model1Class, foreignKey1, otherKey1),
           [camelCase(model2Class.name)]: this.belongsTo(model2Class, foreignKey2, otherKey2)
-        } as {[s: string]: Field<any>}
+        }as {[s: string]: Field<any>}
       }
     }
   }
@@ -117,33 +136,33 @@ function createComputed<T> (getter: (context: Model) => T, setter = (context: Mo
   return new ComputedField(getter, setter)
 }
 
-function createHasOne<T extends Model> (this: ctor, related: ctor<T> | string, foreignKey = camelCase(getModel(this).name) + 'Id', otherKey?: string) {
-  return new HasOne<T>(related, foreignKey, otherKey)
+function createHasOne<T extends Model> (this: ctor, related: ctor<T> | string, foreignKey:KeyName = camelCase(this.name) + 'Id', otherKey:KeyName = this.primaryKey) {
+  return new HasOne<T>(this, related, foreignKey, otherKey)
 }
 
-function createHasMany<T extends Model> (this: ctor, related: ctor<T> | string, foreignKey = camelCase(getModel(this).name) + 'Id', otherKey?: string) {
-  return new HasMany(related, foreignKey, otherKey)
+function createHasMany<T extends Model> (this: ctor, related: ctor<T> | string, foreignKey:KeyName = camelCase(this.name) + 'Id', otherKey:KeyName = this.primaryKey) {
+  return new HasMany(this, related, foreignKey, otherKey)
 }
 
-function createHasManyBy<T extends Model> (related: ctor<T> | string, foreignKey = camelCase(getModel(related).name) + 'Ids', otherKey?: string) {
-  return new HasManyBy(related, foreignKey, otherKey)
+function createHasManyBy<T extends Model> (this: ctor, related: ctor<T> | string, foreignKey:KeyName = camelCase(getModel(related).name) + 'Ids', otherKey:KeyName = getModel(related).primaryKey) {
+  return new HasManyBy(this, related, foreignKey, otherKey)
 }
 
-function createBelongsTo<T extends Model> (related: ctor<T> | string, foreignKey = camelCase(getModel(related).name) + 'Id', otherKey?: string) {
-  return new BelongsTo(related, foreignKey, otherKey)
+function createBelongsTo<T extends Model> (this: ctor, related: ctor<T> | string, foreignKey:KeyName = camelCase(getModel(related).name) + 'Id', otherKey:KeyName = getModel(related).primaryKey) {
+  return new BelongsTo(this, related, foreignKey, otherKey)
 }
 
 function createBelongsToMany<T extends Model> (
   this: typeof Model,
   related: typeof Model,
   pivot?: typeof Model,
-  foreignKey1 = camelCase(getModel(this).name) + 'Id',
-  foreignKey2 = camelCase(getModel(related).name) + 'Id',
-  otherKey1 = this.primaryKey,
-  otherKey2 = related.primaryKey
+  foreignKey1:KeyName = camelCase(getModel(this).name) + 'Id',
+  foreignKey2:KeyName = camelCase(getModel(related).name) + 'Id',
+  otherKey1:KeyName = this.primaryKey,
+  otherKey2:KeyName = related.primaryKey
 ) {
   if (!pivot) pivot = getPivotModel(this, related, foreignKey1, foreignKey2, otherKey1, otherKey2)
-  return new BelongsToMany(related, pivot, foreignKey1, foreignKey2, otherKey1, otherKey2)
+  return new BelongsToMany(this, related, pivot, foreignKey1, foreignKey2, otherKey1, otherKey2)
 }
 
 export function number (defaultValue?: any) {
@@ -174,19 +193,19 @@ export function uid () {
   return prop(createUid)
 }
 
-export function hasOne (related: ctor<Model> | string, foreignKey?: string, otherKey?: string) {
+export function hasOne (related: ctor<Model> | string, foreignKey?: KeyName, otherKey?: KeyName) {
   return prop(createHasOne, related, foreignKey, otherKey)
 }
 
-export function hasMany (related: ctor<Model> | string, foreignKey?: string, otherKey?: string) {
+export function hasMany (related: ctor<Model> | string, foreignKey?: KeyName, otherKey?: KeyName) {
   return prop(createHasMany, related, foreignKey, otherKey)
 }
 
-export function hasManyBy (related: ctor<Model> | string, foreignKey?: string, otherKey?: string) {
+export function hasManyBy (related: ctor<Model> | string, foreignKey?: KeyName, otherKey?: KeyName) {
   return prop(createHasManyBy, related, foreignKey, otherKey)
 }
 
-export function belongsTo (related: ctor<Model> | string, foreignKey?: string, otherKey?: string) {
+export function belongsTo (related: ctor<Model> | string, foreignKey?: KeyName, otherKey?: KeyName) {
   return prop(createBelongsTo, related, foreignKey, otherKey)
 }
 
@@ -224,6 +243,20 @@ const getBaseClass = (type: string | ctor<Model>) => {
   return Type
 }
 
+const setMaybeArrayValues = (target: Record<string, unknown>, targetKeys: KeyName, source: Model, sourceKeys: KeyName) => {
+  if (Array.isArray(targetKeys)) {
+    targetKeys.forEach((k, index) => {
+      target[k] = source[(sourceKeys as string[])[index]]
+    })
+  } else {
+    target[targetKeys] = source[sourceKeys as string]
+  }
+}
+
+const getValuesFromValues = (target: Record<string, unknown>, primaryKey: KeyName) => {
+  return Array.isArray(primaryKey) ? primaryKey.map(k => target[k]) : target[primaryKey]
+}
+
 export class Model {
   ['constructor']: typeof Model
 
@@ -231,13 +264,14 @@ export class Model {
   // eslint-disable-next-line no-use-before-define
   static __fields: { [s: string]: () => Field } = {}
   static entity = 'models'
-  static primaryKey = 'id'
+  static primaryKey: KeyName = 'id'
+
   static typeField = 'type'
-  static base:string|ctor<Model>|null = null
+  static base: string | ctor<Model> | null = null
   static _cache = new Map()
   static _keyFields = new Map()
 
-  static get cache (): Map<string | number, Model> {
+  static get cache (): Map<Key, Model> {
     if (this.base) {
       return getModel(this.base).cache
     }
@@ -279,7 +313,7 @@ export class Model {
 
   static fields (): { [s: string]: Field } {
     return Object.assign({
-      [this.primaryKey]: this.uid()
+      [this.primaryKey as string]: this.uid()
     }, Object.fromEntries(Object.entries(this._fields).map(([ name, fn ]) => [ name, fn() ])))
   }
 
@@ -305,6 +339,7 @@ export class Model {
   static belongsTo = createBelongsTo
   static belongsToMany = createBelongsToMany
 
+  // TODO: Optimize with PK
   static whereFirst<T extends typeof Model> (this: T, condition: Record<string, unknown> | ((m:Model) => boolean)): InstanceType<T> | null {
     return [ ...this.cache.values() ].find(checker(condition)) as InstanceType<T> || null
   }
@@ -317,17 +352,67 @@ export class Model {
     return [ ...this.cache.values() ] as InstanceType<T>[]
   }
 
-  static getPerRelation (field: Relation, id: string | number) {
-    if (field.otherKey !== this.primaryKey) {
+  static getParentRelation (field: Relation, id: Key | Key[]) {
+
+    if (Array.isArray(field.otherKey)) {
+
+      // If the composite keys match, we can use them
+      if (JSON.stringify(field.otherKey) === JSON.stringify(this.primaryKey)) {
+        return this.get(id as Key) as Model
+      }
+
+      // Otherwise we have to search through all models
+      const condition = field.otherKey.reduce((acc, curr, index) => {
+        acc[curr] = (id as Key[])[index]
+        return acc
+      }, {} as Record<string, Key>)
+
+      return this.whereFirst(condition)
+
+    } else if (field.otherKey !== this.primaryKey) {
+
       return this.whereFirst({
-        [field.otherKey]: id
+        [field.otherKey]: id as Key
       })
+
     } else {
-      return this.get(id) as Model
+      return this.get(id as Key) as Model
     }
   }
 
-  get $id () {
+  static getChildRelation (field: Relation, id: Key | Key[]) {
+
+    if (Array.isArray(field.foreignKey)) {
+
+      // If the composite keys match, we can use them
+      if (JSON.stringify(field.foreignKey) === JSON.stringify(field.sourceModel.primaryKey)) {
+        return this.get(id as Key) as Model
+      }
+
+      // Otherwise we have to search through all models
+      const condition = field.foreignKey.reduce((acc, curr, index) => {
+        acc[curr] = (id as Key[])[index]
+        return acc
+      }, {} as Record<string, Key>)
+
+      return this.whereFirst(condition)
+
+    } else if (field.foreignKey !== field.sourceModel.primaryKey) {
+
+      return this.whereFirst({
+        [field.foreignKey]: id as Key
+      })
+
+    } else {
+      return this.get(id as Key) as Model
+    }
+  }
+
+  get $id (): Key {
+    if (Array.isArray(this.constructor.primaryKey)) {
+      return this.constructor.primaryKey.map((key) => this[key]).join(',')
+    }
+
     return this[this.constructor.primaryKey]
   }
 
@@ -397,7 +482,7 @@ export class Model {
     // so we can add it to the corresponding cache array
     relations.forEach(([ name, field ]) => {
       const ctor = getBaseClass(this.constructor)
-      field.Type._subscribe(ctor, name, field)
+      field.getPivot()._subscribe(ctor, name, field)
     })
   }
 
@@ -497,8 +582,8 @@ export class Model {
 
     const setKey = this._setAttrFactory(name, field)
 
-    return (newVal: string | number) => {
-      const oldVal = this[name] as string | number
+    return (newVal: Key) => {
+      const oldVal = this[name] as Key | Key[]
 
       if (newVal === oldVal) return
 
@@ -519,7 +604,7 @@ export class Model {
 
       // Find old subscriber and remove model from their cache
       parents.forEach(([ nameInParentModel, fieldInParentModel ], Parent) => {
-        const subscriber = Parent.getPerRelation(fieldInParentModel, oldVal)
+        const subscriber = Parent.getParentRelation(fieldInParentModel, oldVal)
         subscriber?._updateRelationCache(nameInParentModel, fieldInParentModel, DELETE, this)
       })
 
@@ -528,7 +613,7 @@ export class Model {
 
       // Find new subscriber and add model to their cache
       parents.forEach(([ nameInParentModel, fieldInParentModel ], Parent) => {
-        const subscriber = Parent.getPerRelation(fieldInParentModel, newVal)
+        const subscriber = Parent.getParentRelation(fieldInParentModel, newVal)
         subscriber?._updateRelationCache(nameInParentModel, fieldInParentModel, ADD, this)
       })
     }
@@ -548,12 +633,14 @@ export class Model {
     return () => {
       // This is only ever executed on non-local relations because
       // the _cache (where the local relations keys live) is always already initialized
-      if (cache[hash] === undefined) {
+      if (!local && cache[hash as string] === undefined) {
         console.log('Init relation on', this.constructor.name, hash)
-        this._initializeRelation(hash, field)
+        this._initializeRelation(hash as string, field)
       }
 
-      const relation = field.resolveRelation(cache[hash])
+      const ids = (Array.isArray(hash) ? hash.map((h) => cache[h]) : cache[hash]) as Key | Key[]
+
+      const relation = field.resolveRelation(ids)
       return relation
     }
   }
@@ -576,7 +663,8 @@ export class Model {
 
       const models = val.map((v) => {
         if (!isLocalField) {
-          v[field.foreignKey] = this.$id
+          setMaybeArrayValues(v, field.foreignKey, this, this.constructor.primaryKey)
+          // v[field.foreignKey] = this.$id
         }
 
         if (v instanceof Model) {
@@ -589,10 +677,13 @@ export class Model {
       // We dont have notifications for local models. Therefore we have to set the ids direcly
       const _this = this as any
       if (field instanceof BelongsTo) {
-        _this[field.foreignKey] = models[0].$id
+        // _this[field.foreignKey] = models[0].$id
+        setMaybeArrayValues(this, field.foreignKey, models[0], models[0].constructor.primaryKey)
       } else if (field instanceof HasManyBy) {
-        const ids = models.map(m => m.$id)
-        _this[field.foreignKey] = [ ...new Set([ ...(this as any)[field.foreignKey], ...ids ]) ]
+        // FIXME: The Set trick doesnt work with composite keys and models are added twice
+        const oldIds = this[field.foreignKey]
+        const ids = models.map(m => getValuesFromValues(m, m.constructor.primaryKey))
+        _this[field.foreignKey as string] = [ ...new Set([ ...oldIds, ...ids ]) ]
       }
 
     }
@@ -609,32 +700,50 @@ export class Model {
       return
     }
 
-    const isMany = field instanceof HasMany
+    const many = isMany(field)
 
     const ids = []
     // Loop through all related models and gather ids
-    for (const [ id, model ] of field.Type.cache as Map<string | number, Model>) {
-      if (model[field.foreignKey] === this[field.otherKey]) {
+    for (const [ id, model ] of field.getPivot().cache as Map<Key, Model>) {
+      if (model._getValue(field.foreignKey) === this._getValue(field.otherKey)) {
         ids.push(id)
       }
-      if (!isMany) break
+      if (!many) break
     }
 
-    this._foreignKeyCache[name] = isMany ? ids : (ids[0] ?? null)
+    this._foreignKeyCache[name] = many ? ids : (ids[0] ?? null)
+  }
+
+  _getValue (key: string|string[]) {
+    return Array.isArray(key) ? key.map(k => this[k]) : this[key]
+  }
+
+  static getPrimaryFromValues (values: Record<string, unknown>): Key {
+    if (Array.isArray(this.primaryKey)) {
+      return this.primaryKey.map((key) => values[key]).join(',')
+    }
+
+    return values[this.primaryKey] as Key
+  }
+
+  static joinOrReturn (ids: Key|Key[]) {
+    if (Array.isArray(ids)) return ids.toString()
+    return ids
   }
 
   /**
    * Gets one or multiple models by id
    * @param idOrIds An id or array of ids
    */
-  static get<T extends typeof Model> (this: T, id: string | number): InstanceType<T> | null
-  static get<T extends typeof Model> (this: T, ids: (string | number)[]): InstanceType<T>[]
-  static get<T extends typeof Model> (this: T, idOrIds: (string | number)[] | string | number): InstanceType<T>[] | InstanceType<T> | null {
+  static get<T extends typeof Model> (this: T, id: Key): InstanceType<T> | null
+  static get<T extends typeof Model> (this: T, ids: (Key)[]): InstanceType<T>[]
+  static get<T extends typeof Model> (this: T, idOrIds: (Key)[] | Key): InstanceType<T>[] | InstanceType<T> | null {
 
-    if (Array.isArray(idOrIds)) {
-      return idOrIds.map((id) => this.cache.get(id)).filter((a) => a !== undefined) as InstanceType<T>[]
+    if (Array.isArray(idOrIds) && (!Array.isArray(this.primaryKey) || Array.isArray(idOrIds[0]))) {
+      return idOrIds.map((id) => this.cache.get(this.joinOrReturn(id))).filter((a) => a !== undefined) as InstanceType<T>[]
     }
 
+    idOrIds = (Array.isArray(this.primaryKey) ? idOrIds.toString() : idOrIds) as Key
     return this.cache.get(idOrIds) as InstanceType<T> ?? null
   }
 
@@ -642,15 +751,16 @@ export class Model {
    * Gets one or multiple models by id or creates them if not existent
    * @param idOrIds An id or array of ids
    */
-  static getOrCreate<T extends typeof Model> (this: T, values: Record<string, unknown>): InstanceType<T> | null
+  static getOrCreate<T extends typeof Model> (this: T, values: Record<string, unknown>): InstanceType<T>
   static getOrCreate<T extends typeof Model> (this: T, values: Record<string, unknown>[]): InstanceType<T>[]
-  static getOrCreate<T extends typeof Model> (this: T, values: Record<string, unknown>[] | Record<string, unknown>): InstanceType<T>[] | InstanceType<T> | null {
+  static getOrCreate<T extends typeof Model> (this: T, values: Record<string, unknown>[] | Record<string, unknown>): InstanceType<T>[] | InstanceType<T> {
     const isArray = Array.isArray(values)
     const arr = (isArray ? values : [ values ]) as Record<string, unknown>[]
 
     const result = arr.map((values) => {
-      if (this.cache.has(values[this.primaryKey] as number)) {
-        return this.get(values[this.primaryKey] as number)
+      const id = this.getPrimaryFromValues(values)
+      if (this.cache.has(id)) {
+        return this.get(id)
       }
 
       return this.create(values)
@@ -663,15 +773,16 @@ export class Model {
    * Gets one or multiple models by id or creates them if not existent
    * @param idOrIds An id or array of ids
    */
-  static fillOrCreate<T extends typeof Model> (this: T, values: Record<string, unknown>): InstanceType<T> | null
+  static fillOrCreate<T extends typeof Model> (this: T, values: Record<string, unknown>): InstanceType<T>
   static fillOrCreate<T extends typeof Model> (this: T, values: Record<string, unknown>[]): InstanceType<T>[]
-  static fillOrCreate<T extends typeof Model> (this: T, values: Record<string, unknown>[] | Record<string, unknown>): InstanceType<T>[] | InstanceType<T> | null {
+  static fillOrCreate<T extends typeof Model> (this: T, values: Record<string, unknown>[] | Record<string, unknown>): InstanceType<T>[] | InstanceType<T> {
     const isArray = Array.isArray(values)
     const arr = (isArray ? values : [ values ]) as Record<string, unknown>[]
 
     const result = arr.map((values) => {
-      if (this.cache.has(values[this.primaryKey] as number)) {
-        return this.get(values[this.primaryKey] as number)?.fill(values)
+      const id = this.getPrimaryFromValues(values)
+      if (this.cache.has(id)) {
+        return this.get(id)?.fill(values)
       }
 
       return this.create(values)
@@ -713,19 +824,25 @@ export class Model {
   static _subscribe (Parent: typeof Model, nameInParentModel: string, fieldInParentModel: Relation) {
     console.log(Parent.name, 'wants to subscribe to updates on', this.name)
 
-    // Get all parents subscribed to this key
-    let parents = this.keyFields.get(fieldInParentModel.foreignKey)
+    const foreignKey = Array.isArray(fieldInParentModel.foreignKey)
+      ? fieldInParentModel.foreignKey
+      : [ fieldInParentModel.foreignKey ]
 
-    // If there is none, initialize it
-    if (parents === undefined) {
-      parents = new Map<typeof Model, [string, Relation]>()
-      this.keyFields.set(fieldInParentModel.foreignKey, parents)
-    }
+    foreignKey.forEach((key) => {
+      // Get all parents subscribed to this key
+      let parents = this.keyFields.get(key)
 
-    // Add the parent to subscibers
-    if (!parents.has(Parent)) {
-      parents.set(Parent, [ nameInParentModel, fieldInParentModel ])
-    }
+      // If there is none, initialize it
+      if (parents === undefined) {
+        parents = new Map<typeof Model, [string, Relation]>()
+        this.keyFields.set(key, parents)
+      }
+
+      // Add the parent to subscibers
+      if (!parents.has(Parent)) {
+        parents.set(Parent, [ nameInParentModel, fieldInParentModel ])
+      }
+    })
   }
 
   /**
@@ -733,15 +850,18 @@ export class Model {
    * @param type Type of change in the Model (ADD / DELETE)
    */
   _notifySubscribers (type: symbol) {
-    // keyFields.get(foreignKey).get(subscriber)[nameInParentModel] = fieldInParentModel
     console.log(this.constructor.name, 'is notifying its dependents with', type)
     this.constructor.keyFields.forEach((parents, foreignKey) => {
       parents.forEach(([ nameInParentModel, fieldInParentModel ], Parent) => {
         // value of the foreignKey
-        const id = this[foreignKey] as (string|number)
+        // const id = this[foreignKey] as Key
+
+        const id = Array.isArray(fieldInParentModel.foreignKey)
+          ? fieldInParentModel.foreignKey.map((key) => this[key])
+          : this[fieldInParentModel.foreignKey]
 
         // Get the parent model from registry
-        const model = Parent.getPerRelation(fieldInParentModel, id) as Model
+        const model = Parent.getParentRelation(fieldInParentModel, id) as Model
 
         // If model doesnt exist, we cant notify it. So we return here
         // It basically means that a model has an id set as foreignKey even though the related model doesnt exist
@@ -767,7 +887,7 @@ export class Model {
     const isMany = field instanceof HasMany
     const cache = this._foreignKeyCache
 
-    // If the cache is undefined, it means the Relation wasnt yet accessed loaded
+    // If the cache is undefined, it means the Relation wasnt yet accessed
     // So we would need to load it before we can update it
     // No need to waste time on that if it isnt needed anyway
     if (cache[name] === undefined) {
@@ -860,15 +980,16 @@ export class Model {
   /**
    * Gives back model as object for further consumption
    */
-  toObject (withRelations = false) {
+  toObject (relations?: string[]) {
     const obj = toRaw(this._cache)
 
-    if (withRelations) {
-      const fieldEntries = Object.entries(this.constructor.fields())
-      fieldEntries.forEach(([ name, field ]) => {
-        if (!isLocal(field as Relation)) {
-          const models = this[name] as Model | Model[]
-          obj[name] = Array.isArray(models) ? models.map((model) => model.toObject(true)) : models
+    if (relations) {
+      relations.forEach((field) => {
+        const val = this[field]
+        if (Array.isArray(val)) {
+          obj[field] = val.map(o => o.toObject())
+        } else {
+          obj[field] = val.toObject()
         }
       })
     }
@@ -908,7 +1029,12 @@ export class Model {
     const cascades = this.constructor.cascades()
 
     cascades.forEach((name) => {
-      this[name].delete()
+      const relation = this[name]
+      if (Array.isArray(relation)) {
+        relation.forEach(r => r.delete())
+      } else {
+        this[name].delete()
+      }
     })
   }
 
@@ -917,26 +1043,67 @@ export class Model {
   }
 
   copy<T extends Model> (this:T, relations?: string[]) {
-    return this.constructor.make({ ...this.toObject, [this.primaryKey]: undefined }) as typeof this
-  }
-}
-
-function createCollection (parent: Model, Child: typeof Model, field: Relation) {
-  class Collection extends Array {
-    create (objOrArr: Record<string, unknown> | Record<string, unknown>[]) {
-      const arr = Array.isArray(objOrArr) ? objOrArr : [ objOrArr ]
-      arr.forEach(o => Child.create({ ...o, [field.foreignKey]: parent[field.otherKey] }))
+    const copy = this.toObject()
+    if (Array.isArray(this.constructor.primaryKey)) {
+      this.constructor.primaryKey.forEach((key) => {
+        delete copy[key]
+      })
+    } else {
+      delete copy[this.constructor.primaryKey]
     }
 
-    assign (idOrIds: number | string | Array<number|string>) {
-      const ids = Array.isArray(idOrIds) ? idOrIds : [ idOrIds ]
+    return this.constructor.make(copy) as typeof this
+  }
 
-      ids.forEach((id) => {
-        Child.get(id)![field.foreignKey] = parent[field.otherKey]
+  dehydrate (relations = this.constructor.cascades()) {
+
+    const obj = { ...toRaw(this._cache), __class__: this.constructor.name } as Record<string, unknown>
+
+    if (relations) {
+      relations.forEach((field) => {
+        const val = this[field]
+        if (Array.isArray(val)) {
+          obj[field] = val.map(o => o.dehydrate())
+        } else {
+          obj[field] = val.dehydrate()
+        }
       })
     }
+
+    return obj
+  }
+
+  static hydrate (values: Record<string, unknown>) {
+    if (!values.__class__) {
+      throw new Error('Can not hydrate object without class')
+    }
+
+    const Type = getModel(values.__class__ as string) as typeof Model
+
+    if (!Type) {
+      throw new Error('Model ' + values.___class__ + ' was not found')
+    }
+
+    return Type.fillOrCreate(values)
   }
 }
+
+// function createCollection (parent: Model, Child: typeof Model, field: Relation) {
+//   class Collection extends Array {
+//     create (objOrArr: Record<string, unknown> | Record<string, unknown>[]) {
+//       const arr = Array.isArray(objOrArr) ? objOrArr : [ objOrArr ]
+//       arr.forEach(o => Child.create({ ...o, [field.foreignKey]: parent[field.otherKey] }))
+//     }
+
+//     assign (idOrIds: number | string | Array<number|string>) {
+//       const ids = Array.isArray(idOrIds) ? idOrIds : [ idOrIds ]
+
+//       ids.forEach((id) => {
+//         Child.get(id)![field.foreignKey] = parent[field.otherKey]
+//       })
+//     }
+//   }
+// }
 
 // const makeFactory = (Type: ctor) => (arg: any) => arg instanceof Type ? arg : new Type(arg)
 
@@ -953,6 +1120,8 @@ function convertPrimitive<T> (value: any, Type: ctor<T>|undefined): returnPrimit
 export class Field<T extends unknown = unknown> {
   // static type = type
   isNullable = false
+  isUnique = false
+  isPrimary = false
   defaultValue: unknown = null
   Type: ctor<T> | undefined
 
@@ -967,6 +1136,16 @@ export class Field<T extends unknown = unknown> {
 
   nullable (trueOrFalse = true) {
     this.isNullable = trueOrFalse
+    return this
+  }
+
+  unique (trueOrFalse = true) {
+    this.isUnique = trueOrFalse
+    return this
+  }
+
+  primary (trueOrFalse = true) {
+    this.isPrimary = trueOrFalse
     return this
   }
 
@@ -1013,24 +1192,27 @@ const camelCase = (s: string) => {
 export class Relation<T extends Model = Model> extends Field<T> {
   ['constructor']: typeof Relation
 
-  foreignKey: string
-  otherKey: string
+  sourceModel: ctor<Model>
+  foreignKey: KeyName
+  otherKey: KeyName
   order: Array<string>| ((a:T, b:T) => number) | null
   Type!: ctor<T>
 
-  constructor (related: ctor<T> | string, foreignKey: string, otherKey: string = getModel(related).primaryKey, defaultValue: unknown = null) {
+  constructor (sourceModel: ctor<Model>, related: ctor<T> | string, foreignKey: KeyName, otherKey: KeyName, defaultValue: unknown = null) {
     if (typeof related === 'string') {
       related = getModel(related)
     }
 
     super(defaultValue, related)
 
+    this.sourceModel = sourceModel
     this.foreignKey = foreignKey
     this.otherKey = otherKey
 
     this.order = null
   }
 
+  // Todo: Allow multiply fields
   orderBy (field: string, direction = 'asc') {
     this.order = [ field, direction ]
     return this
@@ -1039,6 +1221,11 @@ export class Relation<T extends Model = Model> extends Field<T> {
   resolveRelation (id: unknown): T | null
   resolveRelation (ids: unknown[]): T[]
   resolveRelation (ids: unknown[]): T[] | T | null {
+    // cache, hash
+    // if (Array.isArray(this.otherKey) {
+    //   if (JSON.stringify(this.foreignKey))
+    // }
+
     const result = this.Type.get(ids)
     if (Array.isArray(this.order)) {
       const [ field, direction ] = this.order
@@ -1048,32 +1235,167 @@ export class Relation<T extends Model = Model> extends Field<T> {
     }
     return result ?? null
   }
+
+  /**
+   * Queries the related model/s of a relation by its/their foreignKey/s
+   * @param id One or more foeign keys of the related Model
+   * @returns The Model or Models whose key/keys were passed
+   */
+  getChildren (id: Key | Key[]) {
+    return this.getRelated(id, this.sourceModel.primaryKey)
+  }
+
+  /**
+   * Queries the parent model/s of a relation by using the foreign keys on the related model
+   * @param id One or more foreign keys on the related Model whose parents needs to be found
+   * @returns The Model or Models whose key/keys were passed
+   */
+  getParentFromParentRelationAndForeignKey (id: Key | Key[]) {
+    if (Array.isArray(this.otherKey)) {
+
+      // If the composite keys match, we can use them
+      if (JSON.stringify(this.otherKey) === JSON.stringify(this.sourceModel.primaryKey)) {
+        return this.sourceModel.get(id as Key) as Model
+      }
+
+      // Otherwise we have to search through all models
+      const condition = this.otherKey.reduce((acc, curr, index) => {
+        acc[curr] = (id as Key[])[index]
+        return acc
+      }, {} as Record<string, Key>)
+
+      return this.sourceModel.whereFirst(condition)
+
+    } else if (this.otherKey !== this.sourceModel.primaryKey) {
+
+      return this.sourceModel.whereFirst({
+        [this.otherKey]: id as Key
+      })
+
+    } else {
+      return this.sourceModel.get(id as Key) as Model
+    }
+  }
+
+  getParent (id: Key | Key[]) {
+    return this.getRelated(id, this.Type.primaryKey)
+  }
+
+  getManyRelated (ids: Key[] | Key[][], primaryKey: KeyName) {
+
+    const foreignKey = this.foreignKey
+
+    // Check for composite key
+    if (Array.isArray(foreignKey)) {
+      ids = ids as Key[][]
+
+      // If composite keys match, we can just get them directly
+      // TODO: Unique keys work as well
+      if (JSON.stringify(foreignKey) === JSON.stringify(primaryKey)) {
+        return this.Type.get(ids) as Model[]
+      } else {
+        // If they dont match, we have to fallback to regular slow search
+        return ids.map(id => {
+          const condition = foreignKey.reduce((acc, curr, index) => {
+            acc[curr] = id[index]
+            return acc
+          }, {} as Record<string, Key>)
+
+          return this.Type.whereFirst(condition) as Model
+        })
+      }
+    } else {
+      //
+    }
+  }
+
+  getRelated (id: Key| Key[], primaryKey: KeyName) {
+    if (Array.isArray(this.foreignKey)) {
+
+      // If the composite keys match, we can use them
+      if (JSON.stringify(this.foreignKey) === JSON.stringify(primaryKey)) {
+        return this.Type.get(id as Key) as Model
+      }
+
+      // Otherwise we have to search through all models
+      const condition = this.foreignKey.reduce((acc, curr, index) => {
+        acc[curr] = (id as Key[])[index]
+        return acc
+      }, {} as Record<string, Key>)
+
+      return this.Type.whereFirst(condition)
+
+    } else if (this.foreignKey !== primaryKey) {
+
+      return this.Type.whereFirst({
+        [this.foreignKey]: id as Key
+      })
+
+    } else {
+      return this.Type.get(id as Key) as Model
+    }
+  }
+
+  getPivot (): ctor<Model> {
+    return this.Type
+  }
 }
 
 export class HasOne<T extends Model> extends Relation<T> {
+  // resolveRelation (id: Key[]) {
+  //   return this.getChildren(id)
+  // }
 }
 
 export class BelongsTo<T extends Model> extends Relation<T> {
+  // resolveRelation (id: Key[]) {
+  //   return this.getParent(id)
+  // }
 }
 
 export class HasMany<T extends Model> extends Relation<T> {
-  constructor (related: ctor<T> | string, foreignKey: string, otherKey?: string, defaultValue = []) {
-    super(related, foreignKey, otherKey, [])
+  constructor (sourceModel: ctor<Model>, related: ctor<T> | string, foreignKey: KeyName, otherKey: KeyName, defaultValue = []) {
+    super(sourceModel, related, foreignKey, otherKey, [])
   }
+
+  // resolveRelation (id: Key[]) {
+  //   return this.getChildren(id)
+  // }
 }
 
 export class HasManyBy<T extends Model> extends Relation<T> {
-  constructor (related: ctor<T> | string, foreignKey: string, otherKey?: string, defaultValue = []) {
-    super(related, foreignKey, otherKey, [])
+  foreignKey!: string
+
+  constructor (sourceModel: ctor<Model>, related: ctor<T> | string, foreignKey: KeyName, otherKey: KeyName, defaultValue = []) {
+    super(sourceModel, related, foreignKey, otherKey, [])
   }
+
+  // resolveRelation (id: Key[][] | Key[]) {
+  //   const otherKey = this.otherKey
+  //   if (JSON.stringify(otherKey) === JSON.stringify(this.Type.primaryKey)) {
+  //     return this.Type.get(id)
+  //   } else {
+  //     if (Array.isArray(otherKey)) {
+  //       return (id as Key[][]).map((id) => {
+  //         const condition = otherKey.reduce((acc, curr, index) => {
+  //           acc[curr] = id[index]
+  //           return acc
+  //         }, {} as Record<string, Key>)
+  //         return this.Type.whereFirst(condition)
+  //       })
+  //     } else {
+  //       return this.Type.where((m:Model) => (id as Key[]).includes(m.$id))
+  //     }
+  //   }
+  // }
 }
 
 export class BelongsToMany<T extends Model> extends Relation<T> {
   pivot: ctor<Model>
-  foreignKey2: string
-  otherKey2: string
-  constructor (related: ctor<T>, pivot: ctor<Model>, foreignKey1: string, foreignKey2: string, otherKey1: string, otherKey2: string, defaultValue = []) {
-    super(related, foreignKey1, otherKey1, [])
+  foreignKey2: KeyName
+  otherKey2: KeyName
+  constructor (sourceModel: ctor<Model>, related: ctor<T>, pivot: ctor<Model>, foreignKey1: KeyName, foreignKey2: KeyName, otherKey1: KeyName, otherKey2: KeyName, defaultValue = []) {
+    super(sourceModel, related, foreignKey1, otherKey1, [])
     this.pivot = pivot
     this.foreignKey2 = foreignKey2
     this.otherKey2 = otherKey2
@@ -1083,6 +1405,10 @@ export class BelongsToMany<T extends Model> extends Relation<T> {
   resolveRelation (id: unknown): never
   resolveRelation (ids: unknown[]): T[] {
     return this.pivot.get(ids).map((p: Model) => p[camelCase(this.Type.name)])
+  }
+
+  getPivot () {
+    return this.pivot
   }
 }
 
@@ -1111,4 +1437,4 @@ export class ComputedField<T extends unknown = unknown> extends Field<T> {
 export const modelRegistry = new Map<string, typeof Model>()
 
 const isLocal = (inst: Relation) => inst instanceof BelongsTo || inst instanceof HasManyBy
-const isMany = (inst: Relation) => inst instanceof HasMany || inst instanceof HasManyBy
+const isMany = (inst: Relation) => inst instanceof HasMany || inst instanceof HasManyBy || inst instanceof BelongsToMany
