@@ -1,6 +1,6 @@
 # vue-model
 
-This library tries to emulate an orm-style data structure in your vue application.
+This library tries to emulate an orm-style data structure in your vue application. It works by defining Models whose attributes are reactive and can directly be used in templates.
 
 ## Getting started
 
@@ -12,7 +12,7 @@ npm install vue-model
 
 Define Model
 
-```typesript
+```typescript
 import { Model } from 'vue-model'
 
 class User extends Model {
