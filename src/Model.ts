@@ -132,7 +132,7 @@ function createUid () {
   return createString(uuid)
 }
 
-function createComputed<T> (getter: (context: Model) => T, setter = (context: Model, val: any) => { /* */ }) {
+function createComputed<T, K> (this: ctor<K>, getter: (context: K) => T, setter = (context: K, val: any) => { /* */ }) {
   return new ComputedField(getter, setter)
 }
 
@@ -322,6 +322,10 @@ export class Model {
   }
 
   static cascades (): string[] {
+    return []
+  }
+
+  static hidden (): string[] {
     return []
   }
 
@@ -707,8 +711,8 @@ export class Model {
     for (const [ id, model ] of field.getPivot().cache as Map<Key, Model>) {
       if (model._getValue(field.foreignKey) === this._getValue(field.otherKey)) {
         ids.push(id)
+        if (!many) break
       }
-      if (!many) break
     }
 
     this._foreignKeyCache[name] = many ? ids : (ids[0] ?? null)
@@ -1000,17 +1004,17 @@ export class Model {
   /**
    * Saves the model in the registry
    */
-  save () {
+  save<T extends Model> (this: T) {
     if (this.constructor.cache.has(this.$id)) {
       const model = (this.constructor.cache.get(this.$id) as Model)
-      if (model === this) return this
+      if (model === this) return this as T
       // https://github.com/microsoft/TypeScript/issues/13086
-      return model.fill(this.toObject())
+      return model.fill(this.toObject()) as T
     }
 
     this.constructor.cache.set(this.$id, this)
     this._notifySubscribers(ADD)
-    return this
+    return this as T
   }
 
   /**
@@ -1019,8 +1023,17 @@ export class Model {
    */
   fill (values: Record<string, unknown> = {}) {
     const fieldEntries = Object.entries(this.constructor.fields())
-    initCache(fieldEntries, values, this._cache)
+    initCache(fieldEntries, Object.assign({}, this._cache, values), this._cache)
     this._setRelations(fieldEntries, values)
+
+    // const hiddenToUndefined = (arr: string[]) => {
+    //   return arr.reduce((acc, curr) => {
+    //     acc[curr] = undefined
+    //     return acc
+    //   }, {} as Record<string, undefined>)
+    // }
+
+    // Object.assign(this, values/*, hiddenToUndefined(this.constructor.hidden()) */)
 
     return this
   }
@@ -1033,7 +1046,8 @@ export class Model {
       if (Array.isArray(relation)) {
         relation.forEach(r => r.delete())
       } else {
-        this[name].delete()
+        // Relation doesnt need to be defined
+        this[name]?.delete()
       }
     })
   }
@@ -1059,6 +1073,10 @@ export class Model {
 
     const obj = { ...toRaw(this._cache), __class__: this.constructor.name } as Record<string, unknown>
 
+    this.constructor.hidden().forEach((field: string) => {
+      delete obj[field]
+    })
+
     if (relations) {
       relations.forEach((field) => {
         const val = this[field]
@@ -1073,12 +1091,12 @@ export class Model {
     return obj
   }
 
-  static hydrate (values: Record<string, unknown>) {
+  static hydrate<T extends typeof Model> (this: T, values: Record<string, unknown>) {
     if (!values.__class__) {
       throw new Error('Can not hydrate object without class')
     }
 
-    const Type = getModel(values.__class__ as string) as typeof Model
+    const Type = getModel(values.__class__ as string) as T
 
     if (!Type) {
       throw new Error('Model ' + values.___class__ + ' was not found')
@@ -1412,19 +1430,19 @@ export class BelongsToMany<T extends Model> extends Relation<T> {
   }
 }
 
-export class ComputedField<T extends unknown = unknown> extends Field<T> {
+export class ComputedField<K, T extends unknown = unknown> extends Field<T> {
   computedValue!: ComputedRef<T>
   value!: T
-  getter: (context: Model) => T
-  setter: (context: Model, value: any) => void
+  getter: (context: K) => T
+  setter: (context: K, value: any) => void
 
-  constructor (getter: (context: Model) => T, setter: (context: Model, value: any) => void) {
+  constructor (getter: (context: K) => T, setter: (context: K, value: any) => void) {
     super(null)
     this.getter = getter
     this.setter = setter
   }
 
-  createComputed (context: Model) {
+  createComputed (context: K) {
     this.computedValue = computed<T>(() => this.getter(context))
     Object.defineProperty(this, 'value', {
       get () { return this.computedValue.value },
