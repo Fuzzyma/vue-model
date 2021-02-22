@@ -4,14 +4,13 @@ export const ADD = Symbol('ADD')
 export const DELETE = Symbol('DELETE')
 
 type Class = { new(...args: any[]): any; };
-type Callback = (data?: unknown) => any
+type Callback = (...data: any[]) => any
+
+export type Dehydrate<T extends typeof Model> = Partial<{[P in keyof InstanceType<T>]: unknown }> & { '__class__': T['model']}
 
 const uuid = () => (Math.random() * 10000000).toString(16)
 
-type withValue<T> = {
-  new: () => T
-  valueOf(): T
-}
+let log = false
 
 /* eslint-disable @typescript-eslint/ban-types */
 type returnPrimitive<T extends any> = T extends String ? string
@@ -28,12 +27,12 @@ type ctor<T = any> = {
   [s: string]: any
 }
 
-type Key = number | string | symbol
+export type Key = number | string | symbol
 type KeyName = string | string[]
 
 // export function field (fn: (...args: any[]) => Field, ...args: any[]) {
 //   return (target: Model, propertyKey: string) => {
-//     console.log(target, propertyKey)
+//     log && console.log(target, propertyKey)
 //     target.constructor._fields[propertyKey] = () => fn(...args)
 //   }
 // }
@@ -55,7 +54,7 @@ function getPivotModel (
   const model1Class = getModel(model1)
   const model2Class = getModel(model2)
 
-  const name = [ model1Class.name, model2Class.name ].sort().join('_')
+  const name = [ model1Class.model, model2Class.model ].sort().join('_')
   const wrapper = {} as Record<string, typeof Model>
 
   wrapper[name] = getModel(name) as typeof Model
@@ -83,8 +82,8 @@ function getPivotModel (
           id: this.uid(),
           ...fields1,
           ...fields2,
-          [camelCase(model1Class.name)]: this.belongsTo(model1Class, foreignKey1, otherKey1),
-          [camelCase(model2Class.name)]: this.belongsTo(model2Class, foreignKey2, otherKey2)
+          [camelCase(model1Class.model)]: this.belongsTo(model1Class, foreignKey1, otherKey1),
+          [camelCase(model2Class.model)]: this.belongsTo(model2Class, foreignKey2, otherKey2)
         }as {[s: string]: Field<any>}
       }
     }
@@ -136,19 +135,19 @@ function createComputed<T, K> (this: ctor<K>, getter: (context: K) => T, setter 
   return new ComputedField(getter, setter)
 }
 
-function createHasOne<T extends Model> (this: ctor, related: ctor<T> | string, foreignKey:KeyName = camelCase(this.name) + 'Id', otherKey:KeyName = this.primaryKey) {
+function createHasOne<T extends Model> (this: ctor, related: ctor<T> | string, foreignKey:KeyName = camelCase(this.model) + 'Id', otherKey:KeyName = this.primaryKey) {
   return new HasOne<T>(this, related, foreignKey, otherKey)
 }
 
-function createHasMany<T extends Model> (this: ctor, related: ctor<T> | string, foreignKey:KeyName = camelCase(this.name) + 'Id', otherKey:KeyName = this.primaryKey) {
+function createHasMany<T extends Model> (this: ctor, related: ctor<T> | string, foreignKey:KeyName = camelCase(this.model) + 'Id', otherKey:KeyName = this.primaryKey) {
   return new HasMany(this, related, foreignKey, otherKey)
 }
 
-function createHasManyBy<T extends Model> (this: ctor, related: ctor<T> | string, foreignKey:KeyName = camelCase(getModel(related).name) + 'Ids', otherKey:KeyName = getModel(related).primaryKey) {
+function createHasManyBy<T extends Model> (this: ctor, related: ctor<T> | string, foreignKey:KeyName = camelCase(getModel(related).model) + 'Ids', otherKey:KeyName = getModel(related).primaryKey) {
   return new HasManyBy(this, related, foreignKey, otherKey)
 }
 
-function createBelongsTo<T extends Model> (this: ctor, related: ctor<T> | string, foreignKey:KeyName = camelCase(getModel(related).name) + 'Id', otherKey:KeyName = getModel(related).primaryKey) {
+function createBelongsTo<T extends Model> (this: ctor, related: ctor<T> | string, foreignKey:KeyName = camelCase(getModel(related).model) + 'Id', otherKey:KeyName = getModel(related).primaryKey) {
   return new BelongsTo(this, related, foreignKey, otherKey)
 }
 
@@ -156,8 +155,8 @@ function createBelongsToMany<T extends Model> (
   this: typeof Model,
   related: typeof Model,
   pivot?: typeof Model,
-  foreignKey1:KeyName = camelCase(getModel(this).name) + 'Id',
-  foreignKey2:KeyName = camelCase(getModel(related).name) + 'Id',
+  foreignKey1:KeyName = camelCase(getModel(this).model) + 'Id',
+  foreignKey2:KeyName = camelCase(getModel(related).model) + 'Id',
   otherKey1:KeyName = this.primaryKey,
   otherKey2:KeyName = related.primaryKey
 ) {
@@ -259,11 +258,11 @@ const getValuesFromValues = (target: Record<string, unknown>, primaryKey: KeyNam
 
 export class Model {
   ['constructor']: typeof Model
+  static model = 'Model'
 
   static isBooted:boolean
   // eslint-disable-next-line no-use-before-define
   static __fields: { [s: string]: () => Field } = {}
-  static entity = 'models'
   static primaryKey: KeyName = 'id'
 
   static typeField = 'type'
@@ -305,8 +304,14 @@ export class Model {
       return this
     }
 
-    console.log('Booting', this.name)
-    modelRegistry.set(this.name, this)
+    // In case the static model property is not set, we automatically set it here
+    // Otherwise the library breaks
+    if (this.model === 'Model' && this !== Model) {
+      this.model = this.name
+    }
+
+    log && console.log('Booting', this.model)
+    modelRegistry.set(this.model, this)
     this.isBooted = true
     return this
   }
@@ -591,7 +596,7 @@ export class Model {
 
       if (newVal === oldVal) return
 
-      // console.log('setting field', name, 'to', newVal)
+      // log && console.log('setting field', name, 'to', newVal)
 
       // If this is a normal field or the instancce is not saved yet
       // just set the value without informing any models
@@ -599,7 +604,7 @@ export class Model {
         return setKey(newVal)
       }
 
-      console.log('foreignKey', name, 'was set with', newVal)
+      log && console.log('foreignKey', name, 'was set with', newVal)
 
       // Get subscribers for this field
       const parents = this.constructor.keyFields.get(name) as Map<typeof Model, [string, Relation]>
@@ -638,7 +643,7 @@ export class Model {
       // This is only ever executed on non-local relations because
       // the _cache (where the local relations keys live) is always already initialized
       if (!local && cache[hash as string] === undefined) {
-        console.log('Init relation on', this.constructor.name, hash)
+        log && console.log('Init relation on', this.constructor.model, hash)
         this._initializeRelation(hash as string, field)
       }
 
@@ -649,6 +654,7 @@ export class Model {
     }
   }
 
+  /* TODO: null values are not processed atm */
   /**
    * Setter factory that creates a setter used when setting a relation of a model
    * @param name The attribute name given in the fields method
@@ -826,7 +832,7 @@ export class Model {
    * @param fieldInParentModel Field object
    */
   static _subscribe (Parent: typeof Model, nameInParentModel: string, fieldInParentModel: Relation) {
-    console.log(Parent.name, 'wants to subscribe to updates on', this.name)
+    log && console.log(Parent.model, 'wants to subscribe to updates on', this.model)
 
     const foreignKey = Array.isArray(fieldInParentModel.foreignKey)
       ? fieldInParentModel.foreignKey
@@ -854,7 +860,7 @@ export class Model {
    * @param type Type of change in the Model (ADD / DELETE)
    */
   _notifySubscribers (type: symbol) {
-    console.log(this.constructor.name, 'is notifying its dependents with', type)
+    log && console.log(this.constructor.model, 'is notifying its dependents with', type)
     this.constructor.keyFields.forEach((parents, foreignKey) => {
       parents.forEach(([ nameInParentModel, fieldInParentModel ], Parent) => {
         // value of the foreignKey
@@ -886,7 +892,7 @@ export class Model {
    * @param child The model that changed
    */
   _updateRelationCache (name: string, field: Relation, type: symbol, child: Model) {
-    console.log('update cache for', this.constructor.name, 'notified by', child.constructor.name, 'local=', isLocal(field), 'fieldname=', name)
+    log && console.log('update cache for', this.constructor.model, 'notified by', child.constructor.model, 'local=', isLocal(field), 'fieldname=', name)
 
     const isMany = field instanceof HasMany
     const cache = this._foreignKeyCache
@@ -930,9 +936,9 @@ export class Model {
    * @param event Name of the event to be emitted
    * @param data Data to be passed to the event handler
    */
-  emit (event: string, data?: unknown) {
+  emit (event: string, ...data: any[]) {
     // runs all listener and returns false if any of the listener returns false
-    return [ ...this._events[event] || [] ].reduce((acc, cb) => cb(data) && acc, true)
+    return [ ...this._events[event] || [] ].reduce((acc, fn) => fn(...data) && acc, true)
   }
 
   /**
@@ -985,7 +991,7 @@ export class Model {
    * Gives back model as object for further consumption
    */
   toObject (relations?: string[]) {
-    const obj = toRaw(this._cache)
+    const obj = Object.assign({}, toRaw(this._cache))
 
     if (relations) {
       relations.forEach((field) => {
@@ -1022,9 +1028,9 @@ export class Model {
    * @param values The values to be bulk set
    */
   fill (values: Record<string, unknown> = {}) {
-    const fieldEntries = Object.entries(this.constructor.fields())
-    initCache(fieldEntries, Object.assign({}, this._cache, values), this._cache)
-    this._setRelations(fieldEntries, values)
+    // const fieldEntries = Object.entries(this.constructor.fields())
+    // initCache(fieldEntries, Object.assign({}, this._cache, values), this._cache)
+    // this._setRelations(fieldEntries, values)
 
     // const hiddenToUndefined = (arr: string[]) => {
     //   return arr.reduce((acc, curr) => {
@@ -1033,7 +1039,7 @@ export class Model {
     //   }, {} as Record<string, undefined>)
     // }
 
-    // Object.assign(this, values/*, hiddenToUndefined(this.constructor.hidden()) */)
+    Object.assign(this, values/*, hiddenToUndefined(this.constructor.hidden()) */)
 
     return this
   }
@@ -1053,7 +1059,7 @@ export class Model {
   }
 
   clone<T extends Model> (this:T, relations?: string[]) {
-    return this.constructor.make(this.toObject()) as typeof this
+    return this.constructor.make(this.toObject(relations)) as typeof this
   }
 
   copy<T extends Model> (this:T, relations?: string[]) {
@@ -1066,22 +1072,34 @@ export class Model {
       delete copy[this.constructor.primaryKey]
     }
 
+    if (relations) {
+      relations.forEach((field) => {
+        const val = this[field]
+        if (Array.isArray(val)) {
+          copy[field] = val.map(o => o.copy())
+        } else {
+          copy[field] = val.copy()
+        }
+      })
+    }
+
     return this.constructor.make(copy) as typeof this
   }
 
-  dehydrate (relations = this.constructor.cascades()) {
+  dehydrate<T extends typeof Model> (this: InstanceType<T>, relations = this.constructor.cascades()) {
 
-    const obj = { ...toRaw(this._cache), __class__: this.constructor.name } as Record<string, unknown>
+    const obj = { ...toRaw(this._cache), __class__: this.constructor.model } as Dehydrate<T>
 
     this.constructor.hidden().forEach((field: string) => {
       delete obj[field]
     })
 
     if (relations) {
-      relations.forEach((field) => {
+      relations.forEach((field: keyof InstanceType<T>) => {
         const val = this[field]
+        if (!val) return
         if (Array.isArray(val)) {
-          obj[field] = val.map(o => o.dehydrate())
+          obj[field] = val.map((o: Model) => o.dehydrate())
         } else {
           obj[field] = val.dehydrate()
         }
@@ -1091,7 +1109,7 @@ export class Model {
     return obj
   }
 
-  static hydrate<T extends typeof Model> (this: T, values: Record<string, unknown>) {
+  static hydrate<T extends typeof Model> (this: T, values: Dehydrate<T>) {
     if (!values.__class__) {
       throw new Error('Can not hydrate object without class')
     }
@@ -1102,7 +1120,7 @@ export class Model {
       throw new Error('Model ' + values.___class__ + ' was not found')
     }
 
-    return Type.fillOrCreate(values)
+    return Type.fillOrCreate(values) as InstanceType<T>
   }
 }
 
@@ -1422,7 +1440,7 @@ export class BelongsToMany<T extends Model> extends Relation<T> {
   resolveRelation (ids: unknown[]): T[]
   resolveRelation (id: unknown): never
   resolveRelation (ids: unknown[]): T[] {
-    return this.pivot.get(ids).map((p: Model) => p[camelCase(this.Type.name)])
+    return this.pivot.get(ids).map((p: Model) => p[camelCase(this.Type.model)])
   }
 
   getPivot () {
@@ -1456,3 +1474,7 @@ export const modelRegistry = new Map<string, typeof Model>()
 
 const isLocal = (inst: Relation) => inst instanceof BelongsTo || inst instanceof HasManyBy
 const isMany = (inst: Relation) => inst instanceof HasMany || inst instanceof HasManyBy || inst instanceof BelongsToMany
+
+export const setLogging = (enable: boolean) => {
+  log = enable
+}
