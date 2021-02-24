@@ -256,6 +256,10 @@ const getValuesFromValues = (target: Record<string, unknown>, primaryKey: KeyNam
   return Array.isArray(primaryKey) ? primaryKey.map(k => target[k]) : target[primaryKey]
 }
 
+const isAnyOfKeysUndefined = (target: Record<string, unknown>, primaryKey: KeyName) => {
+  return Array.isArray(primaryKey) ? primaryKey.some((key) => target[key] === undefined) : target[primaryKey] === undefined
+}
+
 export class Model {
   ['constructor']: typeof Model
   static model = 'Model'
@@ -667,6 +671,36 @@ export class Model {
 
       const isLocalField = isLocal(field)
 
+      const cache = isLocalField ? this._cache : this._foreignKeyCache
+      const hash = isLocalField ? field.foreignKey : name
+      const isInitialized = !isAnyOfKeysUndefined(cache, hash)
+
+      if (isInitialized) {
+        let currentModels = this[name] as Model|Model[]
+        
+        if (currentModels) {
+          if (!Array.isArray(currentModels)) {
+            currentModels = [ currentModels ]
+          }
+    
+          currentModels.forEach((m) => {
+            m.delete()
+          })
+        }
+      }
+
+      if (!val) {
+        if (isLocalField) {
+          if (field instanceof BelongsTo) {
+            ;[].concat(field.foreignKey as never).forEach(val => {
+              this[val] = null
+            })
+          }
+        }
+        return
+      }
+
+
       if (!Array.isArray(val)) {
         val = [ val ]
       }
@@ -678,10 +712,10 @@ export class Model {
         }
 
         if (v instanceof Model) {
-          return v
+          return v.save()
         }
 
-        return new field.Type(v)
+        return field.Type.create(v)
       })
 
       // We dont have notifications for local models. Therefore we have to set the ids direcly
