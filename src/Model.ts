@@ -675,7 +675,7 @@ export class Model {
       const hash = isLocalField ? field.foreignKey : name
       const isInitialized = !isAnyOfKeysUndefined(cache, hash)
 
-      if (isInitialized) {
+      if (isInitialized && !isLocalField) {
         let currentModels = this[name] as Model|Model[]
         
         if (currentModels) {
@@ -1223,7 +1223,12 @@ export class Field<T extends unknown = unknown> {
   getValue (value: unknown): returnPrimitive<T> | null
   getValue (values:unknown[]): returnPrimitive<T>[] | null
   getValue (value: unknown[] | unknown): returnPrimitive<T> | returnPrimitive<T>[] | null {
-    return this.sanitize(value ?? this.getDefault())
+    // Only get the default, if the value is non nullable and the value is null or undefined,
+    // Or if the value is nullable but the value is undefined
+    // That means nullable fields need to be set to null explitely because undefined
+    // Will trigger the default. For most of nullable fields, null is the default anyway
+    // But sometimes fields can nullable and still have a different default
+    return this.sanitize((value == null && !this.isNullable || value === undefined) ? this.getDefault() : value)
   }
 
   getDefault () {
