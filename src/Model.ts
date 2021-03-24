@@ -1357,7 +1357,7 @@ export class Relation<T extends Model = Model> extends Field<T> {
     const result = this.Type.get(ids)
     if (Array.isArray(this.order)) {
       const [ field, direction ] = this.order as [PropertyNamesInstance<T>, string]
-      result.sort((a:T, b:T) => (a[field] < b[field] ? 1 : -1) * (direction === 'asc' ? 1 : -1))
+      result.sort((a:T, b:T) => (a[field] > b[field] ? 1 : -1) * (direction === 'asc' ? 1 : -1))
     } else if (typeof this.order === 'function') {
       result.sort(this.order)
     }
