@@ -6,10 +6,10 @@ export const DELETE = Symbol('DELETE')
 type Class = { new(...args: any[]): any; };
 type Callback = (...data: any[]) => any
 
-type NonFunctionPropertyNames<T> = {
+export type NonFunctionPropertyNames<T> = {
   [K in keyof T]: T[K] extends Function ? never : K;
 }[keyof T];
-type NonFunctionProperties<T> = Pick<T, NonFunctionPropertyNames<T>>;
+export type NonFunctionProperties<T> = Pick<T, NonFunctionPropertyNames<T>>;
 
 export type Properties<T extends typeof Model> = Partial<NonFunctionProperties<OmitPrivate<T>>>
 export type PropertiesInstance<T extends Model> = Partial<NonFunctionProperties<T>>
@@ -230,13 +230,13 @@ const filterRelation = (fields: [string, Field<any>][]) => fields.filter(([ name
 ) as [string, Relation][]
 
 const initCache = (fields: [string, Field<any>][], values: Record<string, unknown>, cache: Record<string, unknown> = {}) => fields.reduce((cache, [ name, field ]) => {
-  if (!(field instanceof Relation)) {
+  if (!(field instanceof Relation) && !(field instanceof ComputedField)) {
     cache[name] = field.getValue(values[name])
   }
   return cache
 }, cache)
 
-function checker<T extends typeof Model> (conditions: Record<PropertyNames<T>, unknown> | ((m: InstanceType<T>) => boolean)) {
+function checker<T extends typeof Model> (conditions: Partial<Record<PropertyNames<T>, unknown>> | ((m: InstanceType<T>) => boolean)) {
   if (typeof conditions === 'function') return conditions
 
   const entries = Object.entries(conditions) as [PropertyNames<T>, unknown][]
@@ -375,16 +375,20 @@ export class Model {
   static belongsToMany = createBelongsToMany
 
   // TODO: Optimize with PK
-  static whereFirst<T extends typeof Model> (this: T, condition: Record<PropertyNames<T>, unknown> | ((m:InstanceType<T>) => boolean)) {
+  static whereFirst<T extends typeof Model> (this: T, condition: Partial<Record<PropertyNames<T>, unknown>> | ((m:InstanceType<T>) => boolean)) {
     return ([ ...this.cache.values() ] as InstanceType<T>[]).find(checker(condition)) || null
   }
 
-  static where<T extends typeof Model> (this: T, condition: Record<PropertyNames<T>, unknown> | ((m:InstanceType<T>) => boolean)) {
+  static where<T extends typeof Model> (this: T, condition: Partial<Record<PropertyNames<T>, unknown>> | ((m:InstanceType<T>) => boolean)) {
     return ([ ...this.cache.values() ] as InstanceType<T>[]).filter(checker(condition))
   }
 
   static all<T extends typeof Model> (this: T) {
     return [ ...this.cache.values() ] as InstanceType<T>[]
+  }
+
+  static first<T extends typeof Model> (this: T) {
+    return this.all()[0]
   }
 
   static getParentRelation<T extends typeof Model> (this: T, field: Relation, id: Key | Key[]) {
@@ -518,7 +522,7 @@ export class Model {
    * Creates private events, cache and foreignKeyCache
    */
   _initPrivateProperties (fieldEntries: [string, Field<any>][], values: Record<string, unknown>) {
-    const cache = initCache(fieldEntries, values, isReactive(values) ? values : {})
+    const cache = initCache(fieldEntries, values, /*isReactive(values) ? values :*/ {})
 
     Object.defineProperties(this, {
       _events: {
@@ -1010,8 +1014,12 @@ export class Model {
           cache[name].splice(index, 1)
         }
       } else {
-        // setting it to null makes it possible to check for undefined above
-        cache[name] = null
+        // Setting it to null makes it possible to check for undefined above
+        // But first we have to check, if this id was actually set as its relation
+        // If its not set, this is an orphan model which was still linked
+        if (cache[name] === child.$id) {
+          cache[name] = null
+        }
       }
 
     }
@@ -1357,7 +1365,7 @@ export class Relation<T extends Model = Model> extends Field<T> {
     const result = this.Type.get(ids)
     if (Array.isArray(this.order)) {
       const [ field, direction ] = this.order as [PropertyNamesInstance<T>, string]
-      result.sort((a:T, b:T) => (a[field] > b[field] ? 1 : -1) * (direction === 'asc' ? 1 : -1))
+      result.sort((a:T, b:T) => (a[field] < b[field] ? -1 : 1) * (direction === 'asc' ? 1 : -1))
     } else if (typeof this.order === 'function') {
       result.sort(this.order)
     }
@@ -1564,8 +1572,8 @@ export class ComputedField<K, T extends unknown = unknown> extends Field<T> {
 
 export const modelRegistry = new Map<string, typeof Model>()
 
-const isLocal = (inst: Relation) => inst instanceof BelongsTo || inst instanceof HasManyBy
-const isMany = (inst: Relation) => inst instanceof HasMany || inst instanceof HasManyBy || inst instanceof BelongsToMany
+export const isLocal = (inst: Relation) => inst instanceof BelongsTo || inst instanceof HasManyBy
+export const isMany = (inst: Relation) => inst instanceof HasMany || inst instanceof HasManyBy || inst instanceof BelongsToMany
 
 export const setLogging = (enable: boolean) => {
   log = enable
