@@ -1,4 +1,4 @@
-import { computed, ComputedRef, isReactive, reactive, Ref, toRaw } from 'vue'
+import { computed, ComputedRef, isReactive, reactive, Ref, shallowReactive, toRaw } from 'vue'
 
 export const ADD = Symbol('ADD')
 export const DELETE = Symbol('DELETE')
@@ -293,7 +293,7 @@ export class Model {
 
   static typeField = 'type'
   static base: string | ctor<Model> | null = null
-  static _cache = new Map()
+  static _cache = shallowReactive(new Map())
   static _keyFields = new Map()
 
   static get cache (): Map<Key, Model> {
@@ -302,7 +302,7 @@ export class Model {
     }
 
     if (!Object.hasOwnProperty.call(this, '_cache')) {
-      this._cache = new Map()
+      this._cache = shallowReactive(new Map())
     }
     return this._cache
   }
