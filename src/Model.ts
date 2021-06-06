@@ -484,7 +484,7 @@ export class Model {
   _cache!: Record<string, any>
   _foreignKeyCache!: Record<string, any>
 
-  //[key: string]: any
+  // [key: string]: any
 
   /**
    * Creates a new instance of the model without saving it to the registry
@@ -522,7 +522,7 @@ export class Model {
    * Creates private events, cache and foreignKeyCache
    */
   _initPrivateProperties (fieldEntries: [string, Field<any>][], values: Record<string, unknown>) {
-    const cache = initCache(fieldEntries, values, /*isReactive(values) ? values :*/ {})
+    const cache = initCache(fieldEntries, values, /* isReactive(values) ? values : */ {})
 
     Object.defineProperties(this, {
       _events: {
@@ -614,7 +614,7 @@ export class Model {
           }
 
           // Set the relation on the parent
-          ;(this as any)[name] = rel
+          (this as any)[name] = rel
         }
       }
     })
@@ -732,12 +732,12 @@ export class Model {
 
       if (isInitialized && !isLocalField) {
         let currentModels = (this as any)[name] as unknown as Model|Model[]
-        
+
         if (currentModels) {
           if (!Array.isArray(currentModels)) {
             currentModels = [ currentModels ]
           }
-    
+
           currentModels.forEach((m) => {
             m.delete()
           })
@@ -747,14 +747,13 @@ export class Model {
       if (!val) {
         if (isLocalField) {
           if (field instanceof BelongsTo) {
-            ;([] as Array<string>).concat(field.foreignKey).forEach(val => {
+            ([] as Array<string>).concat(field.foreignKey).forEach(val => {
               ((this as any)[val] as any) = null
             })
           }
         }
         return
       }
-
 
       if (!Array.isArray(val)) {
         val = [ val ]
@@ -813,7 +812,7 @@ export class Model {
     this._foreignKeyCache[name] = many ? ids : (ids[0] ?? null)
   }
 
-  _getValue(key: KeyName) {
+  _getValue (key: KeyName) {
     return Array.isArray(key) ? key.map(k => (this as any)[k]) : (this as any)[key]
   }
 
@@ -961,7 +960,7 @@ export class Model {
           : this[fKey]
 
         // Get the parent model from registry
-        const model = Parent.getParentRelation(fieldInParentModel, id as Key | Key[]) as Model
+        const model = Parent.getParentRelation(fieldInParentModel, id as unknown as Key | Key[]) as Model
 
         // If model doesnt exist, we cant notify it. So we return here
         // It basically means that a model has an id set as foreignKey even though the related model doesnt exist
@@ -1061,10 +1060,11 @@ export class Model {
   /**
    * Delete the model from registry
    */
-  delete () {
+  delete (beforeDelete?: ((model: Model) => void)) {
     if (this.emit('delete') === false) return this
 
-    this._triggerCascadeDeletion()
+    beforeDelete?.(this)
+    this._triggerCascadeDeletion(beforeDelete)
     this._notifySubscribers(DELETE)
     this.static().cache.delete(this.$id)
 
@@ -1086,6 +1086,10 @@ export class Model {
    */
   toObject<T extends typeof Model> (this: InstanceType<T>, relations?: RelationPropertyNames<T>[]) {
     const obj = Object.assign({}, toRaw(this._cache)) as Properties<T> & RelationProperties<T>
+
+    ;(this.static().hidden() as PropertyNames<T>[]).forEach((field) => {
+      delete obj[field]
+    })
 
     if (relations) {
       relations.forEach((field) => {
@@ -1138,21 +1142,21 @@ export class Model {
     return this
   }
 
-  _triggerCascadeDeletion () {
+  _triggerCascadeDeletion (beforeDelete?: ((model: Model) => void)) {
     const cascades = this.static().cascades()
 
     cascades.forEach((name) => {
       const relation = (this as any)[name] as Model|Model[]|undefined
       if (Array.isArray(relation)) {
-        relation.forEach(r => r.delete())
+        relation.forEach(r => r.delete(beforeDelete))
       } else {
         // Relation doesnt need to be defined
-        relation?.delete()
+        relation?.delete(beforeDelete)
       }
     })
   }
 
-  clone(relations?: string[]) {
+  clone (relations?: string[]) {
     return this.static().make(this.toObject(relations as any))
   }
 
@@ -1168,7 +1172,7 @@ export class Model {
     }
 
     if (relations) {
-      ;(relations as RelationPropertyNames<T>[]).forEach((field) => {
+      (relations as RelationPropertyNames<T>[]).forEach((field) => {
         const val = this[field] as any
         if (Array.isArray(val)) {
           (copy[field] as any) = val.map(o => o.copy())
