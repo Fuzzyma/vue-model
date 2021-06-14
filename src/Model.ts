@@ -1,4 +1,4 @@
-import { computed, ComputedRef, isReactive, reactive, Ref, shallowReactive, toRaw } from 'vue'
+import { computed, ComputedRef, reactive, shallowReactive, toRaw } from 'vue'
 
 export const ADD = Symbol('ADD')
 export const DELETE = Symbol('DELETE')
@@ -25,8 +25,6 @@ export type RelationProperties<T extends typeof Model> = Pick<InstanceType<T>, R
 
 const uuid = () => (Math.random() * 10000000).toString(16)
 
-type a = Properties<typeof Model>
-
 let log = false
 
 /* eslint-disable @typescript-eslint/ban-types */
@@ -35,8 +33,6 @@ type returnPrimitive<T extends any> = T extends String ? string
   : T extends Boolean ? boolean
   : T extends Symbol ? symbol
   : T
-
-type PrimitiveWrapper = String | Number | Boolean | Symbol
 /* eslint-enable */
 
 type ctor<T = any> = {
@@ -79,7 +75,7 @@ function getPivotModel (
   if (!wrapper[name]) {
 
     const arrayKey1 = Array.isArray(foreignKey1) ? foreignKey1 : [ foreignKey1 ]
-    const arrayKey2 = Array.isArray(foreignKey2) ? foreignKey2 : [ foreignKey2 ]
+    // const arrayKey2 = Array.isArray(foreignKey2) ? foreignKey2 : [ foreignKey2 ]
 
     /* eslint-disable @typescript-eslint/ban-types */
     const fields1 = arrayKey1.reduce((acc, curr) => {
@@ -1336,7 +1332,7 @@ export class Relation<T extends Model = Model> extends Field<T> {
   foreignKey: KeyName
   otherKey: KeyName
   order: Array<string>| ((a:T, b:T) => number) | null
-  Type!: ctor<T>
+  declare Type: ctor<T>
 
   constructor (sourceModel: ctor<Model>, related: ctor<T> | string, foreignKey: KeyName, otherKey: KeyName, defaultValue: unknown = null) {
     if (typeof related === 'string') {
@@ -1504,7 +1500,8 @@ export class HasMany<T extends Model> extends Relation<T> {
 }
 
 export class HasManyBy<T extends Model> extends Relation<T> {
-  foreignKey!: string
+  // FIXME
+  declare foreignKey: string
 
   constructor (sourceModel: ctor<Model>, related: ctor<T> | string, foreignKey: KeyName, otherKey: KeyName, defaultValue = []) {
     super(sourceModel, related, foreignKey, otherKey, [])
