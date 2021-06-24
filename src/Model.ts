@@ -1056,11 +1056,11 @@ export class Model {
   /**
    * Delete the model from registry
    */
-  delete (beforeDelete?: ((model: Model) => void)) {
+  delete (cascadeDeletion = true, beforeDelete?: ((model: Model) => void)) {
     if (this.emit('delete') === false) return this
 
     beforeDelete?.(this)
-    this._triggerCascadeDeletion(beforeDelete)
+    if (cascadeDeletion) this._triggerCascadeDeletion(beforeDelete)
     this._notifySubscribers(DELETE)
     this.static().cache.delete(this.$id)
 
@@ -1144,10 +1144,10 @@ export class Model {
     cascades.forEach((name) => {
       const relation = (this as any)[name] as Model|Model[]|undefined
       if (Array.isArray(relation)) {
-        relation.forEach(r => r.delete(beforeDelete))
+        relation.forEach(r => r.delete(true, beforeDelete))
       } else {
         // Relation doesnt need to be defined
-        relation?.delete(beforeDelete)
+        relation?.delete(true, beforeDelete)
       }
     })
   }
