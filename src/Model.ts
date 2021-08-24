@@ -1204,7 +1204,7 @@ export class Model {
     return obj
   }
 
-  static hydrate<T extends typeof Model> (this: T, values: Dehydrate<T>) {
+  static hydrate<T extends typeof Model> (this: T, values: Dehydrate<T>): InstanceType<T> {
     if (!values.__class__) {
       throw new Error('Can not hydrate object without class')
     }
@@ -1215,7 +1215,11 @@ export class Model {
       throw new Error('Model ' + values.__class__ + ' was not found')
     }
 
-    return Type.fillOrCreate(values) as InstanceType<T>
+    if (Type.hydrate === this.hydrate) {
+      return Type.fillOrCreate(values) as InstanceType<T>
+    } else {
+      return Type.hydrate(values) as InstanceType<T>
+    }
   }
 }
 
