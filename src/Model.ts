@@ -1,4 +1,4 @@
-import { computed, ComputedRef, reactive, shallowReactive, toRaw } from 'vue'
+import { computed, ComputedRef, reactive, shallowReactive, toRaw, WritableComputedRef } from 'vue'
 
 export const ADD = Symbol('ADD')
 export const DELETE = Symbol('DELETE')
@@ -557,11 +557,15 @@ export class Model {
     fieldEntries.forEach(([ name, field ]) => {
 
       if (field instanceof Relation) {
+        const comp = computed<any>({
+          get: this._getRelationFactory(name, field).bind(this),
+          set: this._setRelationFactory(name, field).bind(this)
+        })
 
         // Getters and setters for relations
         Object.defineProperty(this, name, {
-          get: this._getRelationFactory(name, field),
-          set: this._setRelationFactory(name, field),
+          get () { return comp.value },
+          set (val) { comp.value = val },
           enumerable: true
         })
 
@@ -570,8 +574,8 @@ export class Model {
         // Getters and setters for computed fields
         field.createComputed(this)
         Object.defineProperty(this, name, {
-          get () { return field.value },
-          set (val) { field.value = val },
+          get () { return field.value.value },
+          set (val) { field.value.value = val },
           enumerable: true
         })
 
@@ -1554,8 +1558,7 @@ export class BelongsToMany<T extends Model> extends Relation<T> {
 }
 
 export class ComputedField<K, T extends unknown = unknown> extends Field<T> {
-  computedValue!: ComputedRef<T>
-  value!: T
+  value!: WritableComputedRef<T>
   getter: (context: K) => T
   setter: (context: K, value: any) => void
 
@@ -1566,11 +1569,7 @@ export class ComputedField<K, T extends unknown = unknown> extends Field<T> {
   }
 
   createComputed (context: K) {
-    this.computedValue = computed<T>(() => this.getter(context))
-    Object.defineProperty(this, 'value', {
-      get () { return this.computedValue.value },
-      set (val) { this.setter(context, val) }
-    })
+    this.value = computed<T>({get: () => this.getter(context), set: (val) => this.setter(context, val)})
     return this
   }
 }
