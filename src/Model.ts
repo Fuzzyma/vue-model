@@ -247,7 +247,7 @@ function checker<T extends typeof Model> (conditions: Partial<Record<PropertyNam
   }
 }
 
-const getBaseClass = (type: string | ctor<Model>) => {
+export const getBaseClass = (type: string | ctor<Model>) => {
   let Type = getModel(type)
   while (Type.base) {
     Type = Type.base
@@ -325,6 +325,8 @@ export class Model {
     if (Object.hasOwnProperty.call(this, 'isBooted')) {
       return this
     }
+
+    if (this.base) getModel(this.base).boot()
 
     // In case the static model property is not set, we automatically set it here
     // Otherwise the library breaks

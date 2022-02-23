@@ -9,8 +9,7 @@
   "main": "./src/Model.ts",
   "scripts": {
     "dev": "vite",
-    "build": "vuedx-typecheck . && vite build",
-    "build2": "vite build",
+    "build": "vite build",
     "build:dev": "vite build --mode development --minify false",
     "test": "mocha -r ts-node/register tests/**/*.test.ts",
     "coverage": "nyc -r lcov -e .ts -x \"*.test.ts\" npm run test",
