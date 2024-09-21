@@ -11,37 +11,8 @@
     "dev": "vite",
     "build": "vite build",
     "build:dev": "vite build --mode development --minify false",
-    "test": "mocha -r ts-node/register tests/**/*.test.ts",
-    "coverage": "nyc -r lcov -e .ts -x \"*.test.ts\" npm run test",
-    "debug": "node --inspect-brk -r ts-node/register ./src/Model.ts",
-    "types": "npx tsc -d --emitDeclarationOnly"
-  },
-  "peerDependencies": {
-    "vue": "^3.1.1"
-  },
-  "devDependencies": {
-    "@typescript-eslint/eslint-plugin": "^4.26.1",
-    "@typescript-eslint/parser": "^4.26.1",
-    "@vitejs/plugin-vue": "^1.2.3",
-    "@vue/compiler-sfc": "^3.1.1",
-    "@vuedx/typecheck": "^0.7.4",
-    "@vuedx/typescript-plugin-vue": "^0.7.4",
-    "eslint": "^7.28.0",
-    "eslint-config-standard": "^16.0.3",
-    "eslint-plugin-import": "^2.23.4",
-    "eslint-plugin-node": "^11.1.0",
-    "eslint-plugin-promise": "^5.1.0",
-    "eslint-plugin-vue": "^7.11.1",
-    "esm": "^3.2.25",
-    "mocha": "^9.0.0",
-    "nyc": "^15.1.0",
-    "sinon": "^11.1.1",
-    "sinon-chai": "^3.7.0",
-    "ts-node": "^10.0.0",
-    "typescript": "^4.3.2",
-    "vite": "^2.3.7",
-    "vue-eslint-parser": "^7.6.0",
-    "vue": "^3.1.1"
+    "test": "vitest",
+    "coverage": "nyc -r lcov -e .ts -x \"*.test.ts\" npm run test"
   },
   "repository": {
     "type": "git",
@@ -56,5 +27,21 @@
   "bugs": {
     "url": "https://github.com/Fuzzyma/vue-model/issues"
   },
-  "homepage": "https://github.com/Fuzzyma/vue-model#readme"
+  "homepage": "https://github.com/Fuzzyma/vue-model#readme",
+  "dependencies": {
+    "@vue/reactivity": "^3.5.6",
+    "oxlint": "^0.9.6",
+    "reflect-metadata": "^0.2.2",
+    "tsx": "^4.19.1",
+    "vitest": "^2.1.1"
+  },
+  "peerDependencies": {
+    "vue": "^3.1.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.1.4",
+    "nyc": "^17.0.0",
+    "typescript": "^5.6.2",
+    "vite": "^5.4.6"
+  }
 }
