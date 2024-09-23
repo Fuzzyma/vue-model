@@ -58,11 +58,9 @@ const uuid = () => (Math.random() * 10000000).toString(16);
 
 let log = false;
 
-type ReturnPrimitive<T extends any> = T extends String ? string : T extends Number ? number : T extends Boolean ? boolean : T extends Symbol ? symbol : T;
-
 type ctor<T = any> = {
   new (...args: any[]): T; // & { valueOf(): returnPrimitive<T>}
-  [s: string]: any;
+  // [s: string]: any;
 };
 
 // type ctor<T = any, A extends any[] = any[]> = {
@@ -79,6 +77,14 @@ type KeyName = string | string[];
 //     target.static()._fields[propertyKey] = () => fn(...args)
 //   }
 // }
+
+type Fields = { [s: string]: Field<any, any, any> };
+
+export type InferFieldType<T extends Field<any, any, any>> = T['TType'];
+
+export type InferTypeFromFields<T extends Fields> = {
+  [P in keyof T]: InferFieldType<T[P]>;
+};
 
 function getModel<T extends typeof Model = typeof Model>(model: T | string): T;
 function getModel<T extends typeof Model = typeof Model>(model: T | string | undefined): T;
@@ -106,12 +112,12 @@ function getPivotModel<T extends typeof Model, S extends typeof Model>(model1: S
   const fields1 = arrayKey1.reduce((acc, curr) => {
     acc[curr] = createString(null);
     return acc;
-  }, {} as Record<string, Field<typeof String>>);
+  }, {} as Record<string, Field<any, any, any>>);
 
   const fields2 = arrayKey2.reduce((acc, curr) => {
     acc[curr] = createString(null);
     return acc;
-  }, {} as Record<string, Field<typeof String>>);
+  }, {} as Record<string, Field<any, any, any>>);
 
   return class extends Model {
     static override model = name;
@@ -127,7 +133,7 @@ function getPivotModel<T extends typeof Model, S extends typeof Model>(model1: S
   }.boot();
 }
 
-export function prop<T extends (...args: any[]) => Field<any>>(fn: T, ...args: any[]) {
+export function prop<T extends (...args: any[]) => Field<any, any, any>>(fn: T, ...args: any[]) {
   return (target: Model, propertyKey: string) => {
     target.static()._fields[propertyKey] = () => fn.apply(Model, args);
   };
@@ -138,27 +144,29 @@ export function prop<T extends (...args: any[]) => Field<any>>(fn: T, ...args: a
 //   target.static()._fields[propertyKey] = () => field;
 // }
 
-function createNumber(defaultValue?: any) {
-  return new Field(defaultValue, Number);
+function createNumber<T extends unknown>(defaultValue?: T) {
+  return new Field(defaultValue, (val) => Number(val));
 }
 
-function createString(defaultValue?: any) {
-  return new Field(defaultValue, String);
+// function createString(): Field<string, false>;
+// function createString<T extends {} | null>(defaultValue: T): Field<string, false, T>;
+function createString<T extends unknown>(defaultValue?: T) {
+  return new Field(defaultValue, (val) => String(val));
 }
 
-function createBoolean(defaultValue?: any) {
-  return new Field(defaultValue, Boolean);
+function createBoolean<T extends unknown>(defaultValue?: T) {
+  return new Field(defaultValue, (val) => Boolean(val));
 }
 
-function createArray<T>(defaultValue: T[] = []) {
-  return new Field(defaultValue, (arg: T) => arg);
+function createArray<T extends unknown>(defaultValue: T[] = []) {
+  return new Field<T, true, T[]>(defaultValue ?? [], (arg: T) => arg);
 }
 
 function createObject<T>(defaultValue = {}, object: ctor<T> /* | ((arg: any) => T) */) {
   return new Field(defaultValue, object);
 }
 
-function createField<T>(defaultValue: any, object: ctor<T> | ((arg: any) => T)) {
+function createField<T, K>(defaultValue: K, object: ctor<T> | ((arg: any) => T)) {
   return new Field(defaultValue, object);
 }
 
@@ -166,7 +174,11 @@ function createUid() {
   return createString(uuid);
 }
 
-function createComputed<T, K>(this: ctor<K>, getter: (context: K) => T, setter = () => {}) {
+function createComputed<T, K>(this: ctor<K>, getter: (context: K) => T, setter = (_context: K, _val: any) => {}) {
+  return new ComputedField(getter, setter);
+}
+
+export function computer<T, K extends Fields>(fields: K, getter: (context: InferTypeFromFields<K>) => T, setter = (_context: InferTypeFromFields<K>, _val: any) => {}) {
   return new ComputedField(getter, setter);
 }
 
@@ -313,7 +325,7 @@ export class Model {
 
   static isBooted: boolean;
   // eslint-disable-next-line no-use-before-define
-  static __fields: { [s: string]: () => Field<any> } = {};
+  static __fields: { [s: string]: () => Field<any, any, any> } = {};
   static primaryKey: KeyName = 'id';
 
   static typeField = 'type';
@@ -343,7 +355,7 @@ export class Model {
     return this._keyFields;
   }
 
-  static get _fields(): { [s: string]: () => Field<any> } {
+  static get _fields(): { [s: string]: () => Field<any, any, any> } {
     if (!Object.hasOwnProperty.call(this, '__fields')) {
       this.__fields = {};
     }
@@ -370,7 +382,7 @@ export class Model {
   }
 
   //  TODO: replace Field with an interface
-  static fields(): { [s: string]: Field<any> } {
+  static fields(): { [s: string]: Field<any, any, any> } {
     const keys = Array.isArray(this.primaryKey) ? this.primaryKey : [this.primaryKey];
 
     return Object.fromEntries(
@@ -1255,9 +1267,9 @@ export class Model {
     }
 
     if (Type.hydrate === this.hydrate) {
-      return Type.fillOrCreate(values) as InstanceType<T>;
+      return Type.fillOrCreate(values);
     } else {
-      return Type.hydrate(values) as InstanceType<T>;
+      return Type.hydrate(values);
     }
   }
 
@@ -1270,36 +1282,30 @@ export class Model {
   }
 }
 
-function isPrimitiveWrapper<T>(Type: T) {
-  return Type instanceof String || Type instanceof Number || Type instanceof Boolean;
-}
-
-function convertPrimitive<T extends ctor<any> | ((...args: any[]) => any) | undefined>(value: any, Type: T): ReturnPrimitive<T> {
+function convertPrimitive<T extends unknown>(value: any, Type: ctor<T> | ((...args: any[]) => T) | typeof Model | undefined): T {
   if (!Type) return value;
 
   // arrow functions don't have prototypes
-  if (Type.prototype && value instanceof Type) return value;
+  if (Type.prototype && value instanceof Type) return value as T;
 
-  let result;
-  if ('model' in Type || Type.toString().startsWith('class')) {
-    result = new (Type as ctor<any>)(value);
-  } else {
-    result = (Type as (...args: any[]) => any)(value);
+  if (Type.prototype && ('model' in Type || Type.toString().startsWith('class'))) {
+    return new (Type as ctor<T>)(value);
   }
 
-  return isPrimitiveWrapper(result) ? result.valueOf() : result;
+  return (Type as (...args: any[]) => T)(value);
 }
 
-export class Field<T extends ctor<any> | ((...args: any[]) => any)> {
+export class Field<T extends unknown = unknown, ARRAY extends boolean = false, K extends unknown = {}> {
   // static type = type
   isNullable = false;
-  defaultValue: unknown = null;
-  Type: T;
+  // defaultValue: unknown = null;
+  // Type: T;
+  declare TType: (ARRAY extends true ? T[] : T) | (K extends null ? (K extends {} ? (K extends undefined ? never : never) : null) : never);
 
-  constructor(defaultValue: any, Type: T) {
-    this.defaultValue = defaultValue;
+  constructor(public defaultValue: K, public Type: ctor<T> | ((args: any) => T) | typeof Model | undefined) {
+    //this.defaultValue = defaultValue;
     // this.Type = isFactory ? Type as (arg: any) => T : makeFactory(Type as ctor<T>)
-    this.Type = Type;
+    // this.Type = Type;
     if (defaultValue === null) {
       this.nullable();
     }
@@ -1307,13 +1313,13 @@ export class Field<T extends ctor<any> | ((...args: any[]) => any)> {
 
   nullable(trueOrFalse = true) {
     this.isNullable = trueOrFalse;
-    return this;
+    return this as unknown as Field<T, ARRAY, null>;
   }
 
   // getValue (value: unknown) {
-  getValue(value: unknown): ReturnPrimitive<T> | null;
-  getValue(values: unknown[]): ReturnPrimitive<T>[] | null;
-  getValue(value: unknown[] | unknown): ReturnPrimitive<T> | ReturnPrimitive<T>[] | null {
+  getValue(value: unknown): T | null;
+  getValue(values: unknown[]): T[] | null;
+  getValue(value: unknown[] | unknown): T | T[] | null {
     // Only get the default, if the value is non nullable and the value is null or undefined,
     // Or if the value is nullable but the value is undefined
     // That means nullable fields need to be set to null explitely because undefined
@@ -1330,9 +1336,9 @@ export class Field<T extends ctor<any> | ((...args: any[]) => any)> {
     return this.defaultValue;
   }
 
-  sanitize(value: unknown): ReturnPrimitive<T> | null;
-  sanitize(values: unknown[]): ReturnPrimitive<T>[] | null;
-  sanitize(value: unknown[] | unknown): ReturnPrimitive<T> | ReturnPrimitive<T>[] | null {
+  sanitize(value: unknown): T | null;
+  sanitize(values: unknown[]): T[] | null;
+  sanitize(value: unknown[] | unknown): T | T[] | null {
     if (value === null) {
       if (!this.isNullable) {
         throw new Error('Field is not nullable');
@@ -1354,9 +1360,7 @@ const camelCase = (s: string) => {
   return s.charAt(0).toLowerCase() + s.slice(1);
 };
 
-abstract class Relation<T extends typeof Model = typeof Model, S extends typeof Model = typeof Model> extends Field<T> {
-  // declare ['constructor']: typeof Relation;
-
+abstract class Relation<T extends typeof Model = typeof Model, S extends typeof Model = typeof Model, ARRAY extends boolean = false> extends Field<InstanceType<T>, ARRAY, unknown> {
   sourceModel: S;
   foreignKey: KeyName;
   otherKey: KeyName;
@@ -1494,7 +1498,7 @@ abstract class Relation<T extends typeof Model = typeof Model, S extends typeof 
     }
   }
 
-  getPivot(): ctor<Model> {
+  getPivot(): typeof Model {
     return this.Type;
   }
 }
@@ -1511,7 +1515,7 @@ export class BelongsTo<T extends typeof Model, S extends typeof Model> extends R
   // }
 }
 
-export class HasMany<T extends typeof Model, S extends typeof Model> extends Relation<T, S> {
+export class HasMany<T extends typeof Model, S extends typeof Model> extends Relation<T, S, true> {
   constructor(sourceModel: S, related: T | string, foreignKey: KeyName, otherKey: KeyName, _defaultValue = []) {
     super(sourceModel, related, foreignKey, otherKey, []);
   }
@@ -1521,7 +1525,7 @@ export class HasMany<T extends typeof Model, S extends typeof Model> extends Rel
   // }
 }
 
-export class HasManyBy<T extends typeof Model, S extends typeof Model> extends Relation<T, S> {
+export class HasManyBy<T extends typeof Model, S extends typeof Model> extends Relation<T, S, true> {
   // FIXME
   declare foreignKey: string;
 
@@ -1549,7 +1553,7 @@ export class HasManyBy<T extends typeof Model, S extends typeof Model> extends R
   // }
 }
 
-export class BelongsToMany<T extends typeof Model, S extends typeof Model, P extends typeof Model> extends Relation<T, S> {
+export class BelongsToMany<T extends typeof Model, S extends typeof Model, P extends typeof Model> extends Relation<T, S, true> {
   pivot: P;
   foreignKey2: KeyName;
   otherKey2: KeyName;
@@ -1571,13 +1575,13 @@ export class BelongsToMany<T extends typeof Model, S extends typeof Model, P ext
 
 type AnyRelation<T extends typeof Model = typeof Model, S extends typeof Model = typeof Model> = HasOne<S, T> | BelongsTo<S, T> | HasMany<S, T> | HasManyBy<S, T> | BelongsToMany<S, T, any>;
 
-export class ComputedField<K, T extends unknown = unknown> extends Field<any> {
+export class ComputedField<K, T extends unknown = unknown> extends Field<T, false, unknown> {
   value!: WritableComputedRef<T>;
   getter: (context: K) => T;
   setter: (context: K, value: any) => void;
 
   constructor(getter: (context: K) => T, setter: (context: K, value: any) => void) {
-    super(null, null);
+    super(null, undefined);
     this.getter = getter;
     this.setter = setter;
   }
@@ -1587,6 +1591,17 @@ export class ComputedField<K, T extends unknown = unknown> extends Field<any> {
     return this;
   }
 }
+
+export const model = <T extends Fields, S extends typeof Model>(fields: (schema: S) => T, base?: S) => {
+  const model = class extends (base ?? Model) {
+    static override fields() {
+      // @ts-expect-error this only errors because I need a default type
+      return fields(this);
+    }
+  };
+
+  return model as { new (): InferTypeFromFields<T> & InstanceType<typeof model> } & Omit<typeof model, 'new'>;
+};
 
 export const modelRegistry = new Map<string, typeof Model>();
 

@@ -90,7 +90,7 @@ export const getCompositeModels = () => {
       return {
         id1: this.uid(),
         id2: this.uid(),
-        parentModelCompositeId: this.array([], String),
+        parentModelCompositeId: this.array<string>(),
         parentModelComposite: this.belongsTo(ParentModelComposite),
       };
     }
@@ -107,7 +107,7 @@ export const getCompositeModels = () => {
       return {
         id1: this.uid(),
         id2: this.uid(),
-        parentModelCompositeId: this.array([], String),
+        parentModelCompositeId: this.array<string>([]),
         parentModelComposite: this.belongsTo(ParentModelComposite),
       };
     }
