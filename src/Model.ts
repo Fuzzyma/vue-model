@@ -4,18 +4,18 @@
 //  - allow hasManyThrough
 
 /* eslint-disable no-wrapper-object-types */
-import { computed, reactive, shallowReactive, toRaw, type WritableComputedRef } from '@vue/reactivity';
-import { assert } from 'vitest';
+import { computed as vueComputed, reactive, shallowReactive, toRaw, type WritableComputedRef } from '@vue/reactivity';
 
 export const ADD = Symbol('ADD');
 export const DELETE = Symbol('DELETE');
 
-type Class = { new (...args: any[]): any };
-type Callback = (...data: any[]) => any;
+export function assert(condition: boolean | object | string | undefined | null, message?: string): asserts condition {
+  if (!condition) {
+    throw new Error(message ?? 'Assertion failed');
+  }
+}
 
-// type Prettify<T> = {
-//   [K in keyof T]: T[K];
-// } & {};
+type Callback = (...data: any[]) => any;
 
 export type OmitPrivate<T extends Model> = Omit<T, '_events' | '_cache' | '_foreignKeyCache' | '$id'>;
 
@@ -58,32 +58,29 @@ const uuid = () => (Math.random() * 10000000).toString(16);
 
 let log = false;
 
-type ctor<T = any> = {
-  new (...args: any[]): T; // & { valueOf(): returnPrimitive<T>}
-  // [s: string]: any;
+type ctor<T = any, A extends any = any> = {
+  new (...args: [A]): T;
 };
-
-// type ctor<T = any, A extends any[] = any[]> = {
-//   new (...args: A): T;
-// };
 
 export type Key = number | string | symbol;
 export type CompositeKey = Key[];
 type KeyName = string | string[];
 
-// export function field (fn: (...args: any[]) => Field, ...args: any[]) {
-//   return (target: Model, propertyKey: string) => {
-//     log && console.log(target, propertyKey)
-//     target.static()._fields[propertyKey] = () => fn(...args)
-//   }
-// }
+export type Fields = { [s: string]: Field<any, any, any> };
 
-type Fields = { [s: string]: Field<any, any, any> };
+export type InferFieldTypeWithDefault<T extends Field<any, any, any>> = T extends Field<any, any, infer _K extends {} | undefined>
+  ? T['TType'] | undefined
+  : T extends Field<any, any, infer _K extends null | undefined>
+  ? T['TType'] | undefined
+  : T['TType'];
 
 export type InferFieldType<T extends Field<any, any, any>> = T['TType'];
 
 export type InferTypeFromFields<T extends Fields> = {
   [P in keyof T]: InferFieldType<T[P]>;
+};
+export type InferTypeFromFieldsWithDefaults<T extends Fields> = {
+  [P in keyof T]: InferFieldTypeWithDefault<T[P]>;
 };
 
 function getModel<T extends typeof Model = typeof Model>(model: T | string): T;
@@ -133,27 +130,41 @@ function getPivotModel<T extends typeof Model, S extends typeof Model>(model1: S
   }.boot();
 }
 
-export function prop<T extends (...args: any[]) => Field<any, any, any>>(fn: T, ...args: any[]) {
-  return (target: Model, propertyKey: string) => {
-    target.static()._fields[propertyKey] = () => fn.apply(Model, args);
-  };
-}
-
-// export function nullable(target: Model, propertyKey: string) {
-//   const field = target.static()._fields[propertyKey]().nullable();
-//   target.static()._fields[propertyKey] = () => field;
+// export function prop<T extends (...args: any[]) => Field<any, any, any>>(fn: T, nullable: boolean, ...args: any[]) {
+//   return (target: Model, propertyKey: string) => {
+//     target.static()._fields[propertyKey] = () => fn.apply(Model, args).nullable(nullable);
+//   };
 // }
 
+export const prop = <T extends (...args: any[]) => Field<any, any, any>>(
+  fn: T,
+  { defaultValue, nullable = defaultValue === null ? true : false, factory }: { defaultValue?: any; nullable?: boolean; factory?: any } = {},
+) => {
+  return <T extends Model>(target: T, propertyKey: string) => {
+    target.static().decorated[propertyKey] = () => fn.call(Model, defaultValue, factory).nullable(nullable);
+  };
+};
+
+export const relation = <T extends (...args: any[]) => Field<any, any, any>>(fn: T, ...args: any[]) => {
+  return <T extends Model>(target: T, propertyKey: string) => {
+    target.static().decorated[propertyKey] = () => fn.apply(Model, args);
+  };
+};
+
+function createNumber(): Field<number>;
+function createNumber<T extends unknown>(defaultValue: T): Field<number, false, T>;
 function createNumber<T extends unknown>(defaultValue?: T) {
   return new Field(defaultValue, (val) => Number(val));
 }
 
-// function createString(): Field<string, false>;
-// function createString<T extends {} | null>(defaultValue: T): Field<string, false, T>;
+function createString(): Field<string>;
+function createString<T extends unknown>(defaultValue: T): Field<string, false, T>;
 function createString<T extends unknown>(defaultValue?: T) {
   return new Field(defaultValue, (val) => String(val));
 }
 
+function createBoolean(): Field<boolean>;
+function createBoolean<T extends unknown>(defaultValue: T): Field<boolean, false, T>;
 function createBoolean<T extends unknown>(defaultValue?: T) {
   return new Field(defaultValue, (val) => Boolean(val));
 }
@@ -162,12 +173,14 @@ function createArray<T extends unknown>(defaultValue: T[] = []) {
   return new Field<T, true, T[]>(defaultValue ?? [], (arg: T) => arg);
 }
 
-function createObject<T>(defaultValue = {}, object: ctor<T> /* | ((arg: any) => T) */) {
-  return new Field(defaultValue, object);
-}
+type ToPrimitive<T> = T extends string | String ? string : T extends number | Number ? number : T extends boolean | Boolean ? boolean : T;
 
-function createField<T, K>(defaultValue: K, object: ctor<T> | ((arg: any) => T)) {
-  return new Field(defaultValue, object);
+function createField(): Field<unknown, false, unknown>;
+function createField<T extends unknown>(defaultValue: T): Field<T, false, T>;
+function createField<T extends unknown, K extends unknown>(defaultValue: K, ctor: ctor<T, K | T>): Field<ToPrimitive<T>, false, T>;
+function createField<T extends unknown, K extends unknown>(defaultValue: K, factory: (arg: any) => T): Field<ToPrimitive<T>, false, T>;
+function createField(defaultValue: any = {}, ctorOrFn?: any) {
+  return new Field(defaultValue, ctorOrFn);
 }
 
 function createUid() {
@@ -219,28 +232,24 @@ function createBelongsToMany<T extends typeof Model, S extends typeof Model, P e
   return new BelongsToMany(this, related, pivot.boot(), foreignKey1, foreignKey2, otherKey1, otherKey2);
 }
 
-export function number(defaultValue?: any) {
-  return prop(createNumber, defaultValue);
+export function number(defaultValue?: any, nullable?: boolean) {
+  return prop(createNumber, { defaultValue, nullable });
 }
 
-export function string(defaultValue?: any) {
-  return prop(createString, defaultValue);
+export function string(defaultValue?: any, nullable?: boolean) {
+  return prop(createString, { defaultValue, nullable });
 }
 
-export function boolean(defaultValue?: any) {
-  return prop(createBoolean, defaultValue);
+export function boolean(defaultValue?: any, nullable?: boolean) {
+  return prop(createBoolean, { defaultValue, nullable });
 }
 
-export function array(defaultValue = [], object: Class = Object) {
-  return prop(createArray, defaultValue, object);
+export function array(defaultValue = [], nullable?: boolean) {
+  return prop(createArray, { defaultValue, nullable });
 }
 
-export function object(defaultValue?: any, object: Class = Object) {
-  return prop(createObject, defaultValue, object);
-}
-
-export function field(defaultValue?: any, object: Class = Object) {
-  return prop(createObject, defaultValue, object);
+export function field(defaultValue?: any, nullable?: boolean, factory: ctor<any> | ((arg: any) => any) = Object) {
+  return prop(createField, { defaultValue, nullable, factory });
 }
 
 export function uid() {
@@ -248,19 +257,30 @@ export function uid() {
 }
 
 export function hasOne(related: ctor<Model> | string, foreignKey?: KeyName, otherKey?: KeyName) {
-  return prop(createHasOne, related, foreignKey, otherKey);
+  return relation(createHasOne, related, foreignKey, otherKey);
 }
 
 export function hasMany(related: ctor<Model> | string, foreignKey?: KeyName, otherKey?: KeyName) {
-  return prop(createHasMany, related, foreignKey, otherKey);
+  return relation(createHasMany, related, foreignKey, otherKey);
 }
 
 export function hasManyBy(related: ctor<Model> | string, foreignKey?: KeyName, otherKey?: KeyName) {
-  return prop(createHasManyBy, related, foreignKey, otherKey);
+  return relation(createHasManyBy, related, foreignKey, otherKey);
 }
 
 export function belongsTo(related: ctor<Model> | string, foreignKey?: KeyName, otherKey?: KeyName) {
-  return prop(createBelongsTo, related, foreignKey, otherKey);
+  return relation(createBelongsTo, related, foreignKey, otherKey);
+}
+
+export function belongsToMany(related: ctor<Model> | string, pivot?: ctor<Model>, foreignKey1?: KeyName, foreignKey2?: KeyName, otherKey1?: KeyName, otherKey2?: KeyName) {
+  return relation(createBelongsToMany, related, pivot, foreignKey1, foreignKey2, otherKey1, otherKey2);
+}
+
+export function computed<T, K extends Model>(getter: (context: K) => T, setter = (_context: K, _val: any) => {}) {
+  return (target: K, propertyKey: string) => {
+    // @ts-expect-error
+    target.static().decorated[propertyKey] = () => createComputed(getter, setter);
+  };
 }
 
 const filterRelation = (fields: [string, Field<any>][]) => fields.filter(([_name, field]) => field instanceof Relation && !isLocal(field)) as [string, Relation][];
@@ -318,20 +338,18 @@ const isAnyOfKeysUndefined = (target: Record<string, unknown>, primaryKey: KeyNa
 type DecideKey<T extends typeof Model> = T['primaryKey'] extends any[] ? CompositeKey : Key;
 
 export class Model {
-  // ['constructor']: typeof Model
   static model = 'Model';
 
   declare ['constructor']: typeof Model;
 
   static isBooted: boolean;
-  // eslint-disable-next-line no-use-before-define
-  static __fields: { [s: string]: () => Field<any, any, any> } = {};
   static primaryKey: KeyName = 'id';
 
   static typeField = 'type';
   static base: string | typeof Model | null = null;
   static _cache = shallowReactive(new Map());
   static _keyFields = new Map();
+  static _decorated: { [s: string]: () => Field<any, any, any> } = {};
 
   static get cache(): Map<Key, Model> {
     if (this.base) {
@@ -355,11 +373,11 @@ export class Model {
     return this._keyFields;
   }
 
-  static get _fields(): { [s: string]: () => Field<any, any, any> } {
-    if (!Object.hasOwnProperty.call(this, '__fields')) {
-      this.__fields = {};
+  static get decorated() {
+    if (!Object.hasOwnProperty.call(this, '_decorated')) {
+      this._decorated = {};
     }
-    return this.__fields;
+    return this._decorated;
   }
 
   static boot<T extends typeof Model>(this: T): T {
@@ -381,22 +399,29 @@ export class Model {
     return this;
   }
 
-  //  TODO: replace Field with an interface
   static fields(): { [s: string]: Field<any, any, any> } {
-    const keys = Array.isArray(this.primaryKey) ? this.primaryKey : [this.primaryKey];
+    return {};
+  }
 
-    return Object.fromEntries(
-      keys.map((key) => {
-        return [key, this.uid()];
-      }),
-    );
+  static getFields() {
+    const fields = this.fields();
 
-    // return Object.assign(
-    //   {
-    //     [this.primaryKey as string]: this.uid(),
-    //   },
-    //   Object.fromEntries(Object.entries(this._fields).map(([name, fn]) => [name, fn()])),
-    // );
+    // add fields that were added through decorators
+    Object.keys(this.decorated).forEach((key) => {
+      if (!(key in fields)) {
+        fields[key] = this.decorated[key]!();
+      }
+    });
+
+    // add primary keys if not present
+    const primaryKeys = Array.isArray(this.primaryKey) ? this.primaryKey : [this.primaryKey];
+    primaryKeys.forEach((key) => {
+      if (!(key in fields)) {
+        fields[key] = this.uid();
+      }
+    });
+
+    return fields;
   }
 
   static types(): { [s: string]: typeof Model } {
@@ -415,7 +440,6 @@ export class Model {
   static string = createString;
   static boolean = createBoolean;
   static array = createArray;
-  static object = createObject;
   static field = createField;
   static uid = createUid;
   static computed = createComputed;
@@ -528,12 +552,7 @@ export class Model {
    * @param values Initial values for the model
    */
   constructor(values: Record<string, unknown> = {}) {
-    // eslint-disable-next-line
-    // @ts-ignore
-    const ctor = this.static();
-
-    // TODO: Make boot call static functions (e.g. fields) to cache them
-    ctor.boot();
+    const ctor = this.static().boot();
 
     const types = ctor.types();
 
@@ -543,7 +562,7 @@ export class Model {
       return new Model(values);
     }
 
-    const fieldEntries = Object.entries(ctor.fields());
+    const fieldEntries = Object.entries(ctor.getFields());
 
     this._initPrivateProperties(fieldEntries, values);
     this._observeRelations(fieldEntries);
@@ -597,7 +616,7 @@ export class Model {
   _initFields(fieldEntries: [string, Field<any>][]) {
     fieldEntries.forEach(([name, field]) => {
       if (field instanceof Relation) {
-        const comp = computed<any>({
+        const comp = vueComputed<any>({
           get: this._getRelationFactory(name, field).bind(this),
           set: this._setRelationFactory(name, field).bind(this),
         });
@@ -1288,6 +1307,9 @@ function convertPrimitive<T extends unknown>(value: any, Type: ctor<T> | ((...ar
   // arrow functions don't have prototypes
   if (Type.prototype && value instanceof Type) return value as T;
 
+  // handle buildin Date gracefully
+  if (Type === (Date as any)) return new Date(value) as T;
+
   if (Type.prototype && ('model' in Type || Type.toString().startsWith('class'))) {
     return new (Type as ctor<T>)(value);
   }
@@ -1587,12 +1609,12 @@ export class ComputedField<K, T extends unknown = unknown> extends Field<T, fals
   }
 
   createComputed(context: K) {
-    this.value = computed<T>({ get: () => this.getter(context), set: (val) => this.setter(context, val) });
+    this.value = vueComputed<T>({ get: () => this.getter(context), set: (val) => this.setter(context, val) });
     return this;
   }
 }
 
-export const model = <T extends Fields, S extends typeof Model>(fields: (schema: S) => T, base?: S) => {
+export const defineSchema = <T extends Fields, S extends typeof Model = typeof Model>(fields: (schema: S) => T, base?: S) => {
   const model = class extends (base ?? Model) {
     static override fields() {
       // @ts-expect-error this only errors because I need a default type
@@ -1600,7 +1622,7 @@ export const model = <T extends Fields, S extends typeof Model>(fields: (schema:
     }
   };
 
-  return model as { new (): InferTypeFromFields<T> & InstanceType<typeof model> } & Omit<typeof model, 'new'>;
+  return model as unknown as { new (): InferTypeFromFields<T> & InstanceType<S> } & Omit<S, 'new'>;
 };
 
 export const modelRegistry = new Map<string, typeof Model>();

@@ -1,5 +1,5 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ADD, DELETE, Model, modelRegistry } from '../src/Model';
+import { afterEach, describe, expect, expectTypeOf, it, vi } from 'vitest';
+import { ADD, array, computed, defineSchema, DELETE, field, Model, modelRegistry, number, string, uid } from '../src/Model';
 import { getCompositeModels, getModels } from './createTestModels';
 
 afterEach(function () {
@@ -22,6 +22,274 @@ describe('static properties', () => {
     expect(Model.cache).not.equals(Model2.cache);
     expect(Model.keyFields).instanceOf(Map);
     expect(Model.keyFields).not.equals(Model2.keyFields);
+    expect(Model.decorated).not.equals(Model2.decorated);
+  });
+});
+
+describe('fields definition', () => {
+  it('fields()', () => {
+    class ModelFields extends Model {
+      declare id: string;
+      declare string: string;
+      declare nullableString1: string | null;
+      declare nullableString2: string | null;
+      declare nullableString3: string | null;
+      declare number: number;
+      declare numberWithDefault1: number;
+      declare numberWithDefault2: number;
+      declare array: string[];
+      declare object: { a: number; b: string };
+      declare objWithFactory: number;
+      declare numberClass: number;
+      declare date: Date;
+      declare computed: number;
+
+      static override fields() {
+        return {
+          id: this.uid(),
+          string: this.string(),
+          nullableString1: this.string(null),
+          nullableString2: this.string('foo').nullable(),
+          nullableString3: this.string('foo').nullable(),
+          number: this.number(),
+          numberWithDefault1: this.number(5),
+          numberWithDefault2: this.number(() => 5),
+          array: this.array<string>(),
+          object: this.field({ a: 1, b: 'foo' }),
+          objWithFactory: this.field('1', (val: number): number => Number(val)),
+          numberClass: this.field(1234, Number),
+          date: this.field(1234, Date).nullable(),
+          computed: this.computed((ctx) => ctx.numberWithDefault1 + ctx.numberWithDefault1),
+        };
+      }
+    }
+
+    // todo: if field is nullable, its defaultValue also needs to be != undefined
+
+    const model = ModelFields.create({
+      id: '1',
+      string: 'foo',
+      number: 1,
+      nullableString3: null,
+    });
+
+    expect(model).deep.equal({
+      id: '1',
+      string: 'foo',
+      nullableString1: null,
+      nullableString2: 'foo',
+      nullableString3: null,
+      number: 1,
+      numberWithDefault1: 5,
+      numberWithDefault2: 5,
+      array: [],
+      object: { a: 1, b: 'foo' },
+      objWithFactory: 1,
+      numberClass: 1234,
+      date: new Date(1234),
+      computed: 10,
+    });
+
+    expectTypeOf(model).toMatchTypeOf<{
+      id: string;
+      string: string | null;
+      nullableString1: string | null;
+      nullableString2: string | null;
+      nullableString3: string | null;
+      number: number;
+      numberWithDefault1: number;
+      numberWithDefault2: number;
+      array: string[];
+      object: { a: number; b: string };
+      objWithFactory: number;
+      numberClass: number;
+      date: Date | null;
+      computed: number;
+    }>();
+  });
+
+  it('decorators', () => {
+    class ModelDecorators extends Model {
+      @uid()
+      declare id: string;
+      @string()
+      declare string: string;
+      @string(null)
+      declare nullableString1: string | null;
+      @string('foo', true)
+      declare nullableString2: string | null;
+      @number()
+      declare number: number;
+      @number(5)
+      declare numberWithDefault1: number;
+      @number(() => 5)
+      declare numberWithDefault2: number;
+      @array()
+      declare array: string[];
+      @field({ a: 1, b: 'foo' })
+      declare object: { a: number; b: string };
+      @field(1234, false, Date)
+      declare class: Date;
+      @computed((ctx) => ctx.numberWithDefault1 + ctx.numberWithDefault1)
+      declare computed: number;
+    }
+
+    const model = ModelDecorators.create({
+      id: '1',
+      string: 'foo',
+      number: 1,
+    });
+
+    expect(model).deep.equal({
+      id: '1',
+      string: 'foo',
+      nullableString1: null,
+      nullableString2: 'foo',
+      number: 1,
+      numberWithDefault1: 5,
+      numberWithDefault2: 5,
+      array: [],
+      object: { a: 1, b: 'foo' },
+      class: new Date(1234),
+      computed: 10,
+    });
+
+    expectTypeOf(model).toMatchTypeOf<{
+      id: string;
+      string: string | null;
+      nullableString1: string | null;
+      nullableString2: string | null;
+      number: number;
+      numberWithDefault1: number;
+      numberWithDefault2: number;
+      array: string[];
+      object: { a: number; b: string };
+      class: Date;
+      computed: number;
+    }>();
+  });
+
+  it('defineSchema()', () => {
+    const ModelDefineSchema = defineSchema((schema) => {
+      return {
+        id: schema.uid(),
+        string: schema.string(),
+        nullableString1: schema.string(null),
+        nullableString2: schema.string('foo').nullable(),
+        nullableString3: schema.string('foo').nullable(),
+        number: schema.number(),
+        numberWithDefault1: schema.number(5),
+        numberWithDefault2: schema.number(() => 5),
+        array: schema.array<string>(),
+        object: schema.field({ a: 1, b: 'foo' }),
+        objWithFactory: schema.field('1', (val: number): number => Number(val)),
+        numberClass: schema.field(1234, Number),
+        date: schema.field(1234, Date).nullable(),
+      };
+    });
+
+    const model = ModelDefineSchema.create({
+      id: '1',
+      string: 'foo',
+      number: 1,
+      nullableString3: null,
+    });
+
+    expect(model).deep.equal({
+      id: '1',
+      string: 'foo',
+      nullableString1: null,
+      nullableString2: 'foo',
+      nullableString3: null,
+      number: 1,
+      numberWithDefault1: 5,
+      numberWithDefault2: 5,
+      array: [],
+      object: { a: 1, b: 'foo' },
+      objWithFactory: 1,
+      numberClass: 1234,
+      date: new Date(1234),
+    });
+
+    expectTypeOf(model).toMatchTypeOf<{
+      id: string;
+      string: string | null;
+      nullableString1: string | null;
+      nullableString2: string | null;
+      nullableString3: string | null;
+      number: number;
+      numberWithDefault1: number;
+      numberWithDefault2: number;
+      array: string[];
+      object: { a: number; b: string };
+      objWithFactory: number;
+      numberClass: number;
+      date: Date | null;
+    }>();
+  });
+
+  it('defineSchema() as base', () => {
+    class ModelDefineSchemaClass extends defineSchema((schema) => {
+      return {
+        id: schema.uid(),
+        string: schema.string(),
+        nullableString1: schema.string(null),
+        nullableString2: schema.string('foo').nullable(),
+        nullableString3: schema.string('foo').nullable(),
+        number: schema.number(),
+        numberWithDefault1: schema.number(5),
+        numberWithDefault2: schema.number(() => 5),
+        array: schema.array<string>(),
+        object: schema.field({ a: 1, b: 'foo' }),
+        objWithFactory: schema.field('1', (val: number): number => Number(val)),
+        numberClass: schema.field(1234, Number),
+        date: schema.field(1234, Date).nullable(),
+      };
+    }) {
+      @computed((ctx) => ctx.numberWithDefault1 + ctx.numberWithDefault1)
+      declare computed: number;
+    }
+
+    const model = ModelDefineSchemaClass.create({
+      id: '1',
+      string: 'foo',
+      number: 1,
+      nullableString3: null,
+    });
+
+    expect(model).deep.equal({
+      id: '1',
+      string: 'foo',
+      nullableString1: null,
+      nullableString2: 'foo',
+      nullableString3: null,
+      number: 1,
+      numberWithDefault1: 5,
+      numberWithDefault2: 5,
+      array: [],
+      object: { a: 1, b: 'foo' },
+      objWithFactory: 1,
+      numberClass: 1234,
+      date: new Date(1234),
+      computed: 10,
+    });
+
+    expectTypeOf(model).toMatchTypeOf<{
+      id: string;
+      string: string | null;
+      nullableString1: string | null;
+      nullableString2: string | null;
+      nullableString3: string | null;
+      number: number;
+      numberWithDefault1: number;
+      numberWithDefault2: number;
+      array: string[];
+      object: { a: number; b: string };
+      objWithFactory: number;
+      numberClass: number;
+      date: Date | null;
+      computed: number;
+    }>();
   });
 });
 
