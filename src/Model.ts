@@ -393,7 +393,7 @@ export class Model {
     );
   }
 
-  static types(): { [s: string]: typeof Model } {
+  static types(): { [s: string]: typeof Model | string } {
     return {};
   }
 
@@ -538,7 +538,10 @@ export class Model {
     const types = ctor.types();
 
     // Make sure that the type for any created model is correct
-    if (values[ctor.typeField] && types[values[ctor.typeField] as string] !== ctor) {
+    if (
+      values[ctor.typeField] &&
+      (types[values[ctor.typeField] as string] !== ctor.model || types[values[ctor.typeField] as string] !== ctor)
+    ) {
       const Model = resolveModel(types[values[ctor.typeField] as string]);
       return new Model(values);
     }
