@@ -65,6 +65,10 @@ export function resolveModel<T extends Model = Model>(model: ctor<T> | string) {
   return ret;
 }
 
+export function resolveModelSave<T extends Model = Model>(model: ctor<T> | string) {
+  return typeof model === 'string' ? (modelRegistry.get(model) as unknown as ctor<T> | undefined) : model;
+}
+
 function getPivotModel(
   model1: typeof Model | string,
   model2: typeof Model | string,
@@ -284,11 +288,15 @@ function checker<T extends typeof Model>(
 }
 
 export const getBaseClass = (type: string | ctor<Model>) => {
-  let Type = resolveModel(type);
-  while (Type.base) {
-    Type = Type.base;
+  let base = resolveModelSave(type);
+  let nextBase = base;
+
+  while (nextBase) {
+    base = nextBase;
+    nextBase = resolveModelSave(nextBase.base);
   }
-  return Type;
+
+  return base;
 };
 
 function setMaybeArrayValues<T, K>(
