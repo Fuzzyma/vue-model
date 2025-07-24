@@ -540,7 +540,8 @@ export class Model {
     // Make sure that the type for any created model is correct
     if (
       values[ctor.typeField] &&
-      (types[values[ctor.typeField] as string] !== ctor.model || types[values[ctor.typeField] as string] !== ctor)
+      types[values[ctor.typeField] as string] !== ctor.model &&
+      types[values[ctor.typeField] as string] !== ctor
     ) {
       const Model = resolveModel(types[values[ctor.typeField] as string]);
       return new Model(values);
