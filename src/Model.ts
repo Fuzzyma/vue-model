@@ -59,7 +59,7 @@ type KeyName = string | string[];
 //   }
 // }
 
-function getModel<T extends Model = Model>(model: ctor<T> | string) {
+export function resolveModel<T extends Model = Model>(model: ctor<T> | string) {
   const ret = typeof model === 'string' ? (modelRegistry.get(model) as unknown as ctor<T>) : model;
   if (!ret) throw new Error('Couldnt find model ' + model + ' in modelRegistry. Is it imported and booted?');
   return ret;
@@ -73,13 +73,13 @@ function getPivotModel(
   otherKey1: KeyName,
   otherKey2: KeyName,
 ) {
-  const model1Class = getModel(model1);
-  const model2Class = getModel(model2);
+  const model1Class = resolveModel(model1);
+  const model2Class = resolveModel(model2);
 
   const name = [model1Class.model, model2Class.model].sort().join('_');
   const wrapper = {} as Record<string, typeof Model>;
 
-  wrapper[name] = getModel(name) as typeof Model;
+  wrapper[name] = resolveModel(name) as typeof Model;
 
   if (!wrapper[name]) {
     const arrayKey1 = Array.isArray(foreignKey1) ? foreignKey1 : [foreignKey1];
@@ -183,8 +183,8 @@ function createHasMany<T extends Model>(
 function createHasManyBy<T extends Model>(
   this: ctor,
   related: ctor<T> | string,
-  foreignKey: KeyName = camelCase(getModel(related).model) + 'Ids',
-  otherKey: KeyName = getModel(related).primaryKey,
+  foreignKey: KeyName = camelCase(resolveModel(related).model) + 'Ids',
+  otherKey: KeyName = resolveModel(related).primaryKey,
 ) {
   return new HasManyBy(this, related, foreignKey, otherKey);
 }
@@ -192,8 +192,8 @@ function createHasManyBy<T extends Model>(
 function createBelongsTo<T extends Model>(
   this: ctor,
   related: ctor<T> | string,
-  foreignKey: KeyName = camelCase(getModel(related).model) + 'Id',
-  otherKey: KeyName = getModel(related).primaryKey,
+  foreignKey: KeyName = camelCase(resolveModel(related).model) + 'Id',
+  otherKey: KeyName = resolveModel(related).primaryKey,
 ) {
   return new BelongsTo(this, related, foreignKey, otherKey);
 }
@@ -202,8 +202,8 @@ function createBelongsToMany<T extends Model>(
   this: typeof Model,
   related: typeof Model,
   pivot?: typeof Model,
-  foreignKey1: KeyName = camelCase(getModel(this).model) + 'Id',
-  foreignKey2: KeyName = camelCase(getModel(related).model) + 'Id',
+  foreignKey1: KeyName = camelCase(resolveModel(this).model) + 'Id',
+  foreignKey2: KeyName = camelCase(resolveModel(related).model) + 'Id',
   otherKey1: KeyName = this.primaryKey,
   otherKey2: KeyName = related.primaryKey,
 ) {
@@ -284,7 +284,7 @@ function checker<T extends typeof Model>(
 }
 
 export const getBaseClass = (type: string | ctor<Model>) => {
-  let Type = getModel(type);
+  let Type = resolveModel(type);
   while (Type.base) {
     Type = Type.base;
   }
@@ -330,7 +330,7 @@ export class Model {
 
   static get cache(): Map<Key, Model> {
     if (this.base) {
-      return getModel(this.base).cache;
+      return resolveModel(this.base).cache;
     }
 
     if (!Object.hasOwnProperty.call(this, '_cache')) {
@@ -341,7 +341,7 @@ export class Model {
 
   static get keyFields(): Map<string, Map<typeof Model, [string, Relation]>> {
     if (this.base) {
-      return getModel(this.base).keyFields;
+      return resolveModel(this.base).keyFields;
     }
 
     if (!Object.hasOwnProperty.call(this, '_keyFields')) {
@@ -362,7 +362,7 @@ export class Model {
       return this;
     }
 
-    if (this.base) getModel(this.base).boot();
+    if (this.base) resolveModel(this.base).boot();
 
     // In case the static model property is not set, we automatically set it here
     // Otherwise the library breaks
@@ -531,7 +531,7 @@ export class Model {
 
     // Make sure that the type for any created model is correct
     if (values[ctor.typeField] && types[values[ctor.typeField] as string] !== ctor) {
-      const Model = getModel(types[values[ctor.typeField] as string]);
+      const Model = resolveModel(types[values[ctor.typeField] as string]);
       return new Model(values);
     }
 
@@ -1254,7 +1254,7 @@ export class Model {
       throw new Error('Can not hydrate object without class');
     }
 
-    const Type = getModel(values.__class__ as string) as T;
+    const Type = resolveModel(values.__class__ as string) as T;
 
     if (!Type) {
       throw new Error('Model ' + values.__class__ + ' was not found');
@@ -1391,7 +1391,7 @@ export class Relation<T extends Model = Model> extends Field<T> {
     defaultValue: unknown = null,
   ) {
     if (typeof related === 'string') {
-      related = getModel(related);
+      related = resolveModel(related);
     }
 
     super(defaultValue, related);
