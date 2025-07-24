@@ -288,8 +288,8 @@ function checker<T extends typeof Model>(
 }
 
 export const getBaseClass = (type: string | ctor<Model>) => {
-  let base = resolveModelSave(type);
-  let nextBase = base;
+  let base = resolveModel(type);
+  let nextBase: ctor<Model> | undefined = base;
 
   while (nextBase) {
     base = nextBase;
